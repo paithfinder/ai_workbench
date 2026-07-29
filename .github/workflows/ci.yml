@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev-ml]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint:web
+      - run: pnpm typecheck:web
+      - run: pnpm test:web
+      - run: pnpm build:web
+
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: ai_workbench
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: ai_workbench
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ai_workbench -d ai_workbench"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+asyncpg://ai_workbench:ci-only-password@127.0.0.1:5432/ai_workbench
+      CORS_ORIGINS: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: 0.11.26
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: uv sync --project apps/api --extra dev --locked
+      - run: uv run --project apps/api ruff check apps/api db/migrations
+      - run: uv run --project apps/api mypy apps/api/src apps/api/tests db/migrations/env.py
+      - run: uv run --project apps/api pytest apps/api/tests
+      - name: Replay database migrations
+        working-directory: apps/api
+        run: uv run alembic upgrade head
+      - name: Verify clean migration downgrade and replay
+        working-directory: apps/api
+        run: uv run alembic downgrade base && uv run alembic upgrade head
