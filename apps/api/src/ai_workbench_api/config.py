@@ -44,6 +44,17 @@ class Settings(BaseSettings):
     cors_origins: CorsOrigins = Field(default_factory=lambda: list(DEFAULT_CORS_ORIGINS))
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     database_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
+    repository_scan_max_directories: int = Field(default=5_000, ge=1, le=100_000)
+    repository_scan_max_files: int = Field(default=20_000, ge=1, le=1_000_000)
+    repository_scan_max_entries: int = Field(default=100_000, ge=1, le=2_000_000)
+    repository_scan_max_depth: int = Field(default=40, ge=1, le=200)
+    repository_scan_max_file_bytes: int = Field(
+        default=2 * 1024 * 1024, ge=1, le=100 * 1024 * 1024
+    )
+    repository_scan_max_total_bytes: int = Field(
+        default=100 * 1024 * 1024, ge=1, le=10 * 1024 * 1024 * 1024
+    )
+    repository_scan_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
 
     @property
     def sqlalchemy_database_url(self) -> str:

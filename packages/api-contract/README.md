@@ -1,5 +1,17 @@
 # API contract package
 
-The FastAPI OpenAPI document is the source of truth. Generated TypeScript types will be committed here once the Day 1 API surface is stable.
+FastAPI's OpenAPI document is the sole contract source of truth. The committed
+`openapi.json` and `schema.d.ts` files are generated artifacts; do not edit them
+or hand-maintain duplicate request and response DTOs.
 
-Do not hand-maintain duplicate request or response DTOs in this package.
+Generate both artifacts from the repository root:
+
+```bash
+pnpm contract:generate
+```
+
+CI can detect drift with:
+
+```bash
+pnpm contract:check
+```

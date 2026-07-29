@@ -1,0 +1,10 @@
+{
+  "name": "@ai-workbench/api-contract",
+  "version": "0.1.0",
+  "private": true,
+  "types": "schema.d.ts",
+  "files": [
+    "openapi.json",
+    "schema.d.ts"
+  ]
+}

@@ -2,7 +2,7 @@
 
 A local-first developer Agent workspace for understanding TypeScript and Python repositories with Agentic RAG, observable LangGraph execution, and verifiable source citations.
 
-> Current status: **Day 1 foundation**. Repository indexing and Agent execution are introduced in the following vertical slices.
+> Current status: **Day 2 repository authorization and secure manifest ingestion**. Chunking, embedding, retrieval, verified citations, and LangGraph query runs begin in the next vertical slice.
 
 ## Principles
 
@@ -29,7 +29,7 @@ A local-first developer Agent workspace for understanding TypeScript and Python 
 - uv
 - Docker Desktop with Compose (required for PostgreSQL)
 
-Docker was not available in the initial implementation environment, so database startup and migration replay must be verified on a machine with Docker before Day 1 is considered fully accepted.
+Docker was not available in the initial implementation environment, so database-dependent acceptance items—including the real migration replay and PostgreSQL integration checks—must be verified on a machine with Docker or in hosted CI.
 
 ## Setup
 
@@ -88,6 +88,8 @@ On Windows, the same checks are available through `scripts/verify.ps1`.
 - [Architecture](docs/architecture/overview.md)
 - [Initial stack ADR](docs/adr/001-initial-stack.md)
 - [Threat model](docs/security/threat-model.md)
+- [Day 1 acceptance](docs/user-guide/day-1-acceptance.md)
+- [Day 2 acceptance](docs/user-guide/day-2-acceptance.md)
 
 ## Supported deployment boundary
 

@@ -111,3 +111,28 @@ async def test_cors_defaults_only_allow_local_frontend_origins() -> None:
 
     assert allowed.headers["access-control-allow-origin"] == "http://127.0.0.1:3000"
     assert "access-control-allow-origin" not in denied.headers
+
+
+@pytest.mark.asyncio
+async def test_request_identifiers_reject_path_like_values() -> None:
+    settings = make_settings()
+    engine = MagicMock(spec=AsyncEngine)
+    engine.dispose = AsyncMock()
+    app = create_app(settings, engine=engine, check_database_on_startup=False)
+
+    async with app.router.lifespan_context(app):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                "/api/v1/health",
+                headers={
+                    "X-Request-ID": r"D:\\Users\\Jane Doe\\private",
+                    "X-Correlation-ID": "Bearer secret-value",
+                },
+            )
+
+    request_id = response.headers["X-Request-ID"]
+    correlation_id = response.headers["X-Correlation-ID"]
+    assert request_id != r"D:\\Users\\Jane Doe\\private"
+    assert correlation_id == request_id

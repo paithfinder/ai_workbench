@@ -1,6 +1,7 @@
 """Request metadata and uniform exception handling."""
 
 import logging
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 
@@ -15,11 +16,12 @@ from ai_workbench_api.logging import request_id_context
 
 logger = logging.getLogger(__name__)
 RequestHandler = Callable[[Request], Awaitable[Response]]
+_SAFE_HEADER_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 
 
 def _safe_header_id(value: str | None) -> str | None:
-    """Accept bounded printable identifiers and reject header/log injection."""
-    if value and len(value) <= 128 and value.isprintable() and not any(c in value for c in "\r\n"):
+    """Accept conservative identifiers and reject path, token, and log injection text."""
+    if value and _SAFE_HEADER_ID.fullmatch(value):
         return value
     return None
 

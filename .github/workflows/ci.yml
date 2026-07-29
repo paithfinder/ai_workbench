@@ -30,7 +30,11 @@ jobs:
       - run: pnpm lint:web
       - run: pnpm typecheck:web
       - run: pnpm test:web
+      - run: pnpm contract:check
       - run: pnpm build:web
+      - name: Install Chromium
+        run: pnpm --filter web exec playwright install --with-deps chromium
+      - run: pnpm --filter web test:e2e
 
   api:
     runs-on: ubuntu-latest
@@ -63,12 +67,29 @@ jobs:
         with:
           python-version: '3.12'
       - run: uv sync --project apps/api --extra dev --locked
-      - run: uv run --project apps/api ruff check apps/api db/migrations
+      - run: uv run --project apps/api ruff check apps/api db/migrations scripts/export_openapi.py
       - run: uv run --project apps/api mypy apps/api/src apps/api/tests db/migrations/env.py
-      - run: uv run --project apps/api pytest apps/api/tests
-      - name: Replay database migrations
+      - name: Upgrade database
         working-directory: apps/api
         run: uv run alembic upgrade head
+      - run: uv run --project apps/api pytest apps/api/tests
       - name: Verify clean migration downgrade and replay
         working-directory: apps/api
         run: uv run alembic downgrade base && uv run alembic upgrade head
+
+  api-windows-security:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: 0.11.26
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: uv sync --project apps/api --extra dev --locked
+      - run: uv run --project apps/api ruff check apps/api/src/ai_workbench_api/security apps/api/src/ai_workbench_api/sources apps/api/tests/test_repository_paths.py apps/api/tests/test_authorization_previews.py apps/api/tests/test_local_repository_scanner.py apps/api/tests/test_redaction.py
+      - run: uv run --project apps/api mypy apps/api/src apps/api/tests
+      - run: uv run --project apps/api pytest apps/api/tests/test_repository_paths.py apps/api/tests/test_authorization_previews.py apps/api/tests/test_local_repository_scanner.py apps/api/tests/test_redaction.py

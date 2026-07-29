@@ -12,8 +12,14 @@
     "lint:web": "pnpm --filter web lint",
     "typecheck:web": "pnpm --filter web typecheck",
     "test:web": "pnpm --filter web test",
+    "contract:export": "uv run --project apps/api python scripts/export_openapi.py",
+    "contract:generate": "pnpm contract:export && pnpm exec openapi-typescript packages/api-contract/openapi.json -o packages/api-contract/schema.d.ts",
+    "contract:check": "pnpm contract:generate && git diff --exit-code -- packages/api-contract/openapi.json packages/api-contract/schema.d.ts",
     "check:web": "pnpm lint:web && pnpm typecheck:web && pnpm test:web && pnpm build:web",
-    "check:api": "uv run --project apps/api ruff check apps/api db/migrations && uv run --project apps/api mypy apps/api/src apps/api/tests db/migrations/env.py && uv run --project apps/api pytest apps/api/tests",
-    "check": "pnpm check:web && pnpm check:api"
+    "check:api": "uv run --project apps/api ruff check apps/api db/migrations scripts/export_openapi.py && uv run --project apps/api mypy apps/api/src apps/api/tests db/migrations/env.py && uv run --project apps/api pytest apps/api/tests",
+    "check": "pnpm contract:check && pnpm check:web && pnpm check:api"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0"
   }
 }

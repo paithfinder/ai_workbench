@@ -16,10 +16,15 @@ from ai_workbench_api.api.middleware import (
     unhandled_error_handler,
     validation_error_handler,
 )
+from ai_workbench_api.api.repositories import router as repositories_router
 from ai_workbench_api.api.schemas import ApiError
 from ai_workbench_api.config import Settings, get_settings
 from ai_workbench_api.db.session import check_database, create_engine, create_session_factory
+from ai_workbench_api.domain.repositories import ScanLockRegistry
 from ai_workbench_api.logging import configure_logging
+from ai_workbench_api.security.authorization_previews import AuthorizationPreviewStore
+from ai_workbench_api.security.repository_paths import WindowsRepositoryPathValidator
+from ai_workbench_api.sources.local_repository_scanner import LocalRepositoryScanner, ScanLimits
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +45,19 @@ def create_app(
         app.state.settings = resolved_settings
         app.state.engine = resolved_engine
         app.state.session_factory = create_session_factory(resolved_engine)
+        app.state.repository_path_validator = WindowsRepositoryPathValidator()
+        app.state.authorization_preview_store = AuthorizationPreviewStore()
+        app.state.local_repository_scanner = LocalRepositoryScanner()
+        app.state.repository_scan_limits = ScanLimits(
+            max_directories=resolved_settings.repository_scan_max_directories,
+            max_files=resolved_settings.repository_scan_max_files,
+            max_entries=resolved_settings.repository_scan_max_entries,
+            max_depth=resolved_settings.repository_scan_max_depth,
+            max_file_bytes=resolved_settings.repository_scan_max_file_bytes,
+            max_total_bytes=resolved_settings.repository_scan_max_total_bytes,
+            timeout_seconds=resolved_settings.repository_scan_timeout_seconds,
+        )
+        app.state.scan_lock_registry = ScanLockRegistry()
         app.state.database_connected = False
         try:
             if check_database_on_startup:
@@ -80,6 +98,7 @@ def create_app(
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(Exception, unhandled_error_handler)
     app.include_router(health_router, prefix=resolved_settings.api_prefix)
+    app.include_router(repositories_router, prefix=resolved_settings.api_prefix)
     return app
 
 

@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -78,14 +79,16 @@ class Repository(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     authorized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    normalized_root_key: Mapped[str | None] = mapped_column(Text)
+    root_identity: Mapped[str | None] = mapped_column(String(128))
+    authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    policy_version: Mapped[str | None] = mapped_column(String(64))
+
     space: Mapped[Space] = relationship(back_populates="repositories")
     sources: Mapped[list["Source"]] = relationship(back_populates="repository")
 
     __table_args__ = (
         UniqueConstraint("space_id", "provider", "external_id", name="uq_repositories_external"),
-        UniqueConstraint(
-            "space_id", "canonical_root_path", name="uq_repositories_local_root"
-        ),
         CheckConstraint("provider IN ('local', 'github')", name="ck_repositories_provider"),
         CheckConstraint(
             "authorization_status IN ('pending', 'authorized', 'revoked')",
@@ -99,13 +102,24 @@ class Repository(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             "AND canonical_root_path IS NULL)",
             name="ck_repositories_provider_fields",
         ),
+        CheckConstraint("authorization_epoch >= 0", name="ck_repositories_authorization_epoch"),
         CheckConstraint(
-            "authorization_status <> 'authorized' OR authorized_at IS NOT NULL",
-            name="ck_repositories_authorized_at",
+            "authorization_status <> 'authorized' OR "
+            "(authorized_at IS NOT NULL AND revoked_at IS NULL AND normalized_root_key IS NOT NULL "
+            "AND root_identity IS NOT NULL AND policy_version IS NOT NULL "
+            "AND authorization_epoch > 0)",
+            name="ck_repositories_authorized_fields",
         ),
         CheckConstraint(
             "authorization_status <> 'revoked' OR revoked_at IS NOT NULL",
             name="ck_repositories_revoked_at",
+        ),
+        Index(
+            "uq_repositories_local_root_key",
+            "space_id",
+            "normalized_root_key",
+            unique=True,
+            postgresql_where=(provider == "local"),
         ),
         Index("ix_repositories_space_full_name", "space_id", "full_name"),
         Index(
@@ -146,6 +160,16 @@ class Source(UUIDPrimaryKeyMixin, TimestampMixin, Base):
             name="ck_sources_kind",
         ),
         CheckConstraint("status IN ('active', 'disabled', 'error')", name="ck_sources_status"),
+        CheckConstraint(
+            "repository_id IS NULL OR kind = 'repository'",
+            name="ck_sources_repository_kind",
+        ),
+        Index(
+            "uq_sources_repository",
+            "repository_id",
+            unique=True,
+            postgresql_where=(repository_id.is_not(None)),
+        ),
         Index("ix_sources_space_kind_status", "space_id", "kind", "status"),
     )
 
@@ -164,17 +188,68 @@ class SourceVersion(UUIDPrimaryKeyMixin, Base):
     version_metadata: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSONB, nullable=False, default=dict, server_default="{}"
     )
+    authorization_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    policy_version: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
     source: Mapped[Source] = relationship(back_populates="versions")
     index_jobs: Mapped[list["IndexJob"]] = relationship(back_populates="source_version")
+    manifest_entries: Mapped[list["ScanManifestEntry"]] = relationship(
+        back_populates="source_version"
+    )
 
     __table_args__ = (
         UniqueConstraint("source_id", "version_identifier", name="uq_source_versions_revision"),
+        UniqueConstraint(
+            "source_id",
+            "content_hash",
+            "authorization_epoch",
+            "policy_version",
+            name="uq_source_versions_manifest_epoch_policy",
+        ),
+        CheckConstraint(
+            "authorization_epoch >= 0", name="ck_source_versions_authorization_epoch"
+        ),
         CheckConstraint("content_hash ~ '^[0-9a-f]{64}$'", name="ck_source_versions_sha256"),
         Index("ix_source_versions_source_created", "source_id", created_at.desc()),
+    )
+
+
+class ScanManifestEntry(UUIDPrimaryKeyMixin, Base):
+    """Immutable relative-path entry in a repository scan manifest."""
+
+    __tablename__ = "scan_manifest_entries"
+
+    source_version_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("source_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    relative_path: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    modified_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    file_identity: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    source_version: Mapped[SourceVersion] = relationship(back_populates="manifest_entries")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source_version_id", "relative_path", name="uq_scan_manifest_entries_path"
+        ),
+        CheckConstraint(
+            "relative_path <> '' AND left(relative_path, 1) <> '/' "
+            "AND relative_path !~ '(^|/)\\.\\.(/|$)' "
+            "AND position('\\\\' in relative_path) = 0",
+            name="ck_scan_manifest_entries_relative_path",
+        ),
+        CheckConstraint("content_hash ~ '^[0-9a-f]{64}$'", name="ck_scan_manifest_entries_sha256"),
+        CheckConstraint("size_bytes >= 0", name="ck_scan_manifest_entries_size"),
+        CheckConstraint("modified_ns >= 0", name="ck_scan_manifest_entries_modified_ns"),
+        Index("ix_scan_manifest_entries_version", "source_version_id"),
     )
 
 
@@ -207,6 +282,15 @@ class IndexJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint(
             "completed_at IS NULL OR started_at IS NULL OR completed_at >= started_at",
             name="ck_index_jobs_time_order",
+        ),
+        UniqueConstraint(
+            "source_version_id", "attempt", name="uq_index_jobs_version_attempt"
+        ),
+        Index(
+            "uq_index_jobs_active_version",
+            "source_version_id",
+            unique=True,
+            postgresql_where=status.in_(("pending", "running")),
         ),
         Index("ix_index_jobs_space_status_created", "space_id", "status", "created_at"),
         Index("ix_index_jobs_source_version", "source_version_id"),

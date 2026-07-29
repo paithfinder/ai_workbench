@@ -12,8 +12,12 @@ request_id_context: ContextVar[str | None] = ContextVar("request_id", default=No
 
 _REDACTED = "[REDACTED]"
 _SENSITIVE_KEY = re.compile(
-    r"(?:authorization|api[-_]?key|access[-_]?token|client[-_]?secret|password)", re.IGNORECASE
+    r"(?:authorization|api[-_]?key|access[-_]?token|client[-_]?secret|password|"
+    r"preview[-_]?token|request[-_]?body|response[-_]?body|canonical[-_]?path|"
+    r"root[-_]?path|submitted[-_]?path|absolute[-_]?path)",
+    re.IGNORECASE,
 )
+_SAFE_LOG_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _TOKEN_PATTERNS = (
     re.compile(r"\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{8,}\b"),
     re.compile(r"\bgh(?:p|o|u|s|r)_[A-Za-z0-9]{20,}\b"),
@@ -21,6 +25,15 @@ _TOKEN_PATTERNS = (
     re.compile(r"\bsecret_[A-Za-z0-9]{20,}\b"),
     re.compile(r"\bntn_[A-Za-z0-9]{20,}\b"),
     re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}"),
+    re.compile(
+        r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----.*?"
+        r"-----END (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----",
+        re.DOTALL,
+    ),
+    re.compile(
+        r"(?i)(?<![A-Za-z0-9])(?:[A-Z]:[\\/])[^\r\n]*"
+    ),
+    re.compile(r"(?<![\\/])(?:\\\\|//)[^\r\n]*"),
 )
 
 
@@ -54,7 +67,14 @@ class JsonFormatter(logging.Formatter):
         }
         request_id = getattr(record, "request_id", None) or request_id_context.get()
         if request_id:
-            payload["request_id"] = request_id
+            request_id_text = str(request_id)
+            redacted_request_id = redact(request_id_text)
+            payload["request_id"] = (
+                request_id_text
+                if redacted_request_id == request_id_text
+                and _SAFE_LOG_ID.fullmatch(request_id_text)
+                else _REDACTED
+            )
         if record.exc_info:
             payload["exception"] = redact(self.formatException(record.exc_info))
         for name, value in record.__dict__.items():
