@@ -1,0 +1,297 @@
+{
+  "components": {
+    "schemas": {
+      "BootstrapResponse": {
+        "properties": {
+          "capabilities": {
+            "$ref": "#/components/schemas/CapabilityResponse"
+          },
+          "foundation_status": {
+            "const": "ready",
+            "default": "ready",
+            "title": "Foundation Status",
+            "type": "string"
+          },
+          "space": {
+            "$ref": "#/components/schemas/KnowledgeSpaceResponse"
+          },
+          "statistics": {
+            "$ref": "#/components/schemas/BootstrapStatistics"
+          }
+        },
+        "required": [
+          "space",
+          "capabilities",
+          "statistics"
+        ],
+        "title": "BootstrapResponse",
+        "type": "object"
+      },
+      "BootstrapStatistics": {
+        "properties": {
+          "activity_events": {
+            "title": "Activity Events",
+            "type": "integer"
+          },
+          "queued_jobs": {
+            "title": "Queued Jobs",
+            "type": "integer"
+          },
+          "sources": {
+            "title": "Sources",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sources",
+          "queued_jobs",
+          "activity_events"
+        ],
+        "title": "BootstrapStatistics",
+        "type": "object"
+      },
+      "CapabilityResponse": {
+        "properties": {
+          "evidence_agent": {
+            "default": false,
+            "title": "Evidence Agent",
+            "type": "boolean"
+          },
+          "extraction_review": {
+            "default": false,
+            "title": "Extraction Review",
+            "type": "boolean"
+          },
+          "knowledge_tree": {
+            "default": false,
+            "title": "Knowledge Tree",
+            "type": "boolean"
+          },
+          "source_import": {
+            "default": false,
+            "title": "Source Import",
+            "type": "boolean"
+          },
+          "spaced_review": {
+            "default": false,
+            "title": "Spaced Review",
+            "type": "boolean"
+          },
+          "trusted_qa": {
+            "default": false,
+            "title": "Trusted Qa",
+            "type": "boolean"
+          }
+        },
+        "title": "CapabilityResponse",
+        "type": "object"
+      },
+      "DependencyStatus": {
+        "properties": {
+          "database": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Database",
+            "type": "string"
+          },
+          "object_storage": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Object Storage",
+            "type": "string"
+          },
+          "redis": {
+            "enum": [
+              "ok",
+              "unavailable"
+            ],
+            "title": "Redis",
+            "type": "string"
+          }
+        },
+        "required": [
+          "database",
+          "redis",
+          "object_storage"
+        ],
+        "title": "DependencyStatus",
+        "type": "object"
+      },
+      "KnowledgeSpaceResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "name"
+        ],
+        "title": "KnowledgeSpaceResponse",
+        "type": "object"
+      },
+      "LivenessResponse": {
+        "properties": {
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "status": {
+            "const": "ok",
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "service",
+          "version"
+        ],
+        "title": "LivenessResponse",
+        "type": "object"
+      },
+      "ReadinessResponse": {
+        "properties": {
+          "dependencies": {
+            "$ref": "#/components/schemas/DependencyStatus"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "not_ready"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "dependencies"
+        ],
+        "title": "ReadinessResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "D1 foundation API for the personal knowledge management workbench.",
+    "title": "Zixu Knowledge Workbench API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/bootstrap": {
+      "get": {
+        "operationId": "get_bootstrap",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Bootstrap",
+        "tags": [
+          "bootstrap"
+        ]
+      }
+    },
+    "/api/v1/knowledge-spaces/default": {
+      "get": {
+        "operationId": "get_default_knowledge_space",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeSpaceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Default Space",
+        "tags": [
+          "bootstrap"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "get_liveness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivenessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Live",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "get_readiness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Ready",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  }
+}

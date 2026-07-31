@@ -1,0 +1,16 @@
+node_modules/
+.next/
+coverage/
+playwright-report/
+test-results/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.env
+*.log
+.DS_Store
+.idea/
+.vscode/

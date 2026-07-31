@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+  PNPM_VERSION: "10.26.2"
+
+jobs:
+  evals:
+    name: RAG eval dataset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Validate Chinese RAG seeds
+        run: python evals/validate_seeds.py
+
+  backend:
+    name: Backend, migrations, OpenAPI
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: knowledge_workbench
+          POSTGRES_USER: knowledge
+          POSTGRES_PASSWORD: knowledge_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U knowledge -d knowledge_workbench"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+asyncpg://knowledge:knowledge_dev@localhost:5432/knowledge_workbench
+      REDIS_URL: redis://localhost:6379/0
+      S3_ENDPOINT: http://localhost:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: knowledge-sources
+      AI_PROVIDER: fake
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.26"
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install Python workspace
+        run: uv sync --frozen --all-packages --all-groups
+      - name: Lint backend
+        run: uv run --package knowledge-workbench-api ruff check apps/api
+      - name: Type-check backend
+        run: uv run --package knowledge-workbench-api mypy apps/api/src
+      - name: Run backend unit tests
+        run: uv run --package knowledge-workbench-api pytest apps/api/tests/unit
+      - name: Replay migrations
+        run: uv run --package knowledge-workbench-api python scripts/verify_migrations.py
+      - name: Check migration head
+        run: uv run --package knowledge-workbench-api alembic -c apps/api/alembic.ini current --check-heads
+      - name: Export OpenAPI contract
+        run: uv run --package knowledge-workbench-api python scripts/export_openapi.py
+      - name: Check exported OpenAPI drift
+        run: git diff --exit-code -- packages/api-contract/openapi.json
+
+  frontend:
+    name: Frontend and OpenAPI boundary
+    runs-on: ubuntu-latest
+    needs: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install JavaScript workspace
+        run: pnpm install --frozen-lockfile
+      - name: Generate TypeScript contract
+        run: pnpm --filter @zixu/api-contract generate
+      - name: Check TypeScript contract drift
+        run: git diff --exit-code -- packages/api-contract/schema.d.ts
+      - name: Lint frontend
+        run: pnpm lint
+      - name: Type-check frontend
+        run: pnpm typecheck
+      - name: Test frontend
+        run: pnpm test
+      - name: Build frontend
+        run: pnpm build
+
+  smoke:
+    name: Compose Playwright smoke
+    runs-on: ubuntu-latest
+    needs: [evals, backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install JavaScript workspace
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Prepare Compose environment
+        run: cp .env.example .env
+      - name: Start anticipated services
+        run: docker compose -f infra/compose/docker-compose.yml up --build --wait
+      - name: Run Web and API smoke tests
+        run: pnpm exec playwright test --config tests/e2e/playwright.config.ts
+      - name: Show Compose logs
+        if: failure()
+        run: docker compose -f infra/compose/docker-compose.yml logs --no-color
+      - name: Stop Compose services
+        if: always()
+        run: docker compose -f infra/compose/docker-compose.yml down --volumes

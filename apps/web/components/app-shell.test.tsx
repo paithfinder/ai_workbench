@@ -1,0 +1,47 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AppShell } from "./app-shell";
+
+const { usePathname } = vi.hoisted(() => ({
+  usePathname: vi.fn(() => "/knowledge"),
+}));
+
+vi.mock("next/navigation", () => ({ usePathname }));
+
+describe("AppShell", () => {
+  beforeEach(() => {
+    usePathname.mockReturnValue("/knowledge");
+  });
+
+  it("renders all routes and identifies the active route", () => {
+    render(<AppShell><h1>页面内容</h1></AppShell>);
+
+    expect(screen.getByRole("link", { name: "跳到主要内容" })).toHaveAttribute(
+      "href",
+      "#main-content",
+    );
+    expect(screen.getAllByRole("link")).toHaveLength(9);
+    expect(screen.getByRole("link", { name: "我的知识树" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("opens and closes the responsive navigation", async () => {
+    render(<AppShell><h1>页面内容</h1></AppShell>);
+    const toggle = screen.getByRole("button", { name: "打开导航" });
+
+    await userEvent.click(toggle);
+    expect(screen.getByRole("button", { name: "关闭导航" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "打开导航" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+});

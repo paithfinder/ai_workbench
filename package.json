@@ -1,0 +1,21 @@
+{
+  "name": "zixu-knowledge-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.26.2",
+  "scripts": {
+    "dev:web": "pnpm --filter @zixu/web dev",
+    "build": "pnpm --filter @zixu/web build",
+    "lint": "pnpm --filter @zixu/web lint",
+    "typecheck": "pnpm --filter @zixu/web typecheck",
+    "test": "pnpm --filter @zixu/web test",
+    "contract:export": "uv run --package knowledge-workbench-api python scripts/export_openapi.py",
+    "contract:generate": "pnpm contract:export && pnpm --filter @zixu/api-contract generate",
+    "contract:check": "pnpm contract:generate && git diff --exit-code -- packages/api-contract",
+    "e2e": "playwright test --config tests/e2e/playwright.config.ts",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.54.1"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@zixu/api-contract",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "generate": "openapi-typescript openapi.json -o schema.d.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.8.0",
+    "typescript": "5.8.3"
+  }
+}
