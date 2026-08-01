@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -43,6 +44,20 @@ class SourceStatus(StrEnum):
 class ProcessingStatus(StrEnum):
     PENDING = "pending"
     READY = "ready"
+    FAILED = "failed"
+
+
+class ParseStatus(StrEnum):
+    NOT_STARTED = "not_started"
+    QUEUED = "queued"
+    PARSING = "parsing"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class JobAttemptStatus(StrEnum):
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
     FAILED = "failed"
 
 
@@ -113,16 +128,64 @@ class Source(TimestampMixin, Base):
     versions: Mapped[list[SourceVersion]] = relationship(back_populates="source")
 
 
+class SourceCreateRequest(Base):
+    __tablename__ = "source_create_requests"
+    __table_args__ = (
+        UniqueConstraint("space_id", "idempotency_key", name="uq_source_create_requests_key"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("sources.id", ondelete="RESTRICT"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class SourceVersion(Base):
     __tablename__ = "source_versions"
     __table_args__ = (
         UniqueConstraint("source_id", "version_number", name="uq_source_versions_number"),
-        UniqueConstraint("source_id", "content_sha256", name="uq_source_versions_content"),
+        UniqueConstraint(
+            "source_id", "upload_idempotency_key", name="uq_source_versions_upload_idempotency"
+        ),
         CheckConstraint("version_number > 0", name="ck_source_versions_number_positive"),
         CheckConstraint("size_bytes >= 0", name="ck_source_versions_size_nonnegative"),
         CheckConstraint(
             "processing_status IN ('pending','ready','failed')",
             name="ck_source_versions_processing_status",
+        ),
+        CheckConstraint(
+            "parse_status IN ('not_started','queued','parsing','ready','failed')",
+            name="ck_source_versions_parse_status",
+        ),
+        CheckConstraint(
+            "content_sha256 IS NULL OR content_sha256 ~ '^[0-9a-f]{64}$'",
+            name="ck_source_versions_content_sha256",
+        ),
+        CheckConstraint(
+            "expected_content_sha256 ~ '^[0-9a-f]{64}$'",
+            name="ck_source_versions_expected_sha256",
+        ),
+        CheckConstraint(
+            "completed_at IS NULL OR (content_sha256 IS NOT NULL AND storage_key IS NOT NULL "
+            "AND object_etag IS NOT NULL)",
+            name="ck_source_versions_completed_identity",
+        ),
+        Index(
+            "uq_source_versions_content",
+            "source_id",
+            "content_sha256",
+            unique=True,
+            postgresql_where=text("content_sha256 IS NOT NULL"),
         ),
     )
 
@@ -131,13 +194,24 @@ class SourceVersion(Base):
         PGUUID(as_uuid=True), ForeignKey("sources.id", ondelete="CASCADE"), nullable=False
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_sha256: Mapped[str | None] = mapped_column(String(64))
+    expected_content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(500), nullable=False)
     media_type: Mapped[str] = mapped_column(String(255), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    upload_storage_key: Mapped[str] = mapped_column(String(1000), nullable=False)
     storage_key: Mapped[str | None] = mapped_column(String(1000))
+    object_etag: Mapped[str | None] = mapped_column(String(255))
+    upload_idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    upload_request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    completion_idempotency_key: Mapped[str | None] = mapped_column(String(255))
+    upload_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     processing_status: Mapped[str] = mapped_column(
         String(32), nullable=False, default=ProcessingStatus.PENDING
+    )
+    parse_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ParseStatus.NOT_STARTED
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -168,6 +242,13 @@ class Job(TimestampMixin, Base):
             unique=True,
             postgresql_where=text("idempotency_key IS NOT NULL"),
         ),
+        Index(
+            "uq_jobs_source_version_kind",
+            "source_version_id",
+            "kind",
+            unique=True,
+            postgresql_where=text("source_version_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -184,8 +265,97 @@ class Job(TimestampMixin, Base):
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_code: Mapped[str | None] = mapped_column(String(100))
     error_message: Mapped[str | None] = mapped_column(String(2000))
+    retryable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class JobAttempt(Base):
+    __tablename__ = "job_attempts"
+    __table_args__ = (
+        UniqueConstraint("job_id", "attempt_number", name="uq_job_attempts_number"),
+        CheckConstraint("attempt_number > 0", name="ck_job_attempts_number_positive"),
+        CheckConstraint(
+            "status IN ('running','succeeded','failed')", name="ck_job_attempts_status"
+        ),
+        Index("ix_job_attempts_job_status", "job_id", "status"),
+        Index("ix_job_attempts_status_lease", "status", "lease_expires_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    job_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    celery_task_id: Mapped[str | None] = mapped_column(String(255))
+    worker_name: Mapped[str | None] = mapped_column(String(255))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lease_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    error_message: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class JobRetryRequest(Base):
+    __tablename__ = "job_retry_requests"
+    __table_args__ = (
+        UniqueConstraint("job_id", "idempotency_key", name="uq_job_retry_requests_key"),
+        UniqueConstraint(
+            "job_id", "target_attempt_number", name="uq_job_retry_requests_attempt"
+        ),
+        CheckConstraint("target_attempt_number > 0", name="ck_job_retry_target_attempt_positive"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    job_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_attempt_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class OutboxEvent(Base):
+    __tablename__ = "outbox_events"
+    __table_args__ = (
+        CheckConstraint("attempt_count >= 0", name="ck_outbox_attempt_count_nonnegative"),
+        Index(
+            "ix_outbox_events_pending",
+            "available_at",
+            "created_at",
+            postgresql_where=text("published_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    aggregate_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    aggregate_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    deduplication_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class ActivityEvent(Base):

@@ -11,7 +11,7 @@ const readyPayload = {
     name: "我的知识库",
   },
   capabilities: {
-    source_import: false,
+    source_import: true,
     extraction_review: false,
     knowledge_tree: false,
     trusted_qa: false,
@@ -61,8 +61,10 @@ describe("TodayOverview", () => {
     resolveFetch?.(new Response(JSON.stringify(readyPayload)));
 
     expect(await screen.findByText("我的知识库已连接")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "今日学习" })).toHaveAttribute("id", "today-title");
     expect(screen.getByText("my-knowledge-base")).toBeInTheDocument();
-    expect(screen.getAllByText("0")).toHaveLength(4);
+    expect(screen.getAllByText("0")).toHaveLength(3);
+    expect(screen.getByText("1")).toBeInTheDocument();
   });
 
   it("counts only capabilities enabled by the backend", async () => {

@@ -8,7 +8,7 @@ const bootstrapPayload = {
     name: "我的知识库",
   },
   capabilities: {
-    source_import: false,
+    source_import: true,
     extraction_review: false,
     knowledge_tree: false,
     trusted_qa: false,
@@ -38,7 +38,7 @@ describe("fetchBootstrap", () => {
     await expect(fetchBootstrap()).resolves.toEqual(bootstrapPayload);
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/bootstrap",
-      { headers: { Accept: "application/json" } },
+      { headers: new Headers({ Accept: "application/json" }) },
     );
   });
 
@@ -53,8 +53,15 @@ describe("fetchBootstrap", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://knowledge.example.test/api/v1/bootstrap",
-      { headers: { Accept: "application/json" } },
+      { headers: new Headers({ Accept: "application/json" }) },
     );
+  });
+
+  it("accepts an optional dynamic upload limit", async () => {
+    const payload = { ...bootstrapPayload, max_upload_size_bytes: 10 * 1024 * 1024 };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(payload))));
+
+    await expect(fetchBootstrap()).resolves.toEqual(payload);
   });
 
   it("rejects missing capabilities and non-ready foundations", async () => {
@@ -72,7 +79,7 @@ describe("fetchBootstrap", () => {
     );
 
     await expect(fetchBootstrap()).rejects.toThrow(
-      "首页数据格式与当前应用不兼容",
+      "API 返回了当前应用无法识别的数据",
     );
   });
 });

@@ -57,7 +57,11 @@ services:
     entrypoint: >
       /bin/sh -c "
       mc alias set local http://minio:9000 $$S3_ACCESS_KEY $$S3_SECRET_KEY &&
-      mc mb --ignore-existing local/$$S3_BUCKET
+      mc mb --ignore-existing local/$$S3_BUCKET &&
+      mc anonymous set none local/$$S3_BUCKET &&
+      printf '%s' '<CORSConfiguration><CORSRule><AllowedOrigin>http://localhost:3000</AllowedOrigin><AllowedMethod>POST</AllowedMethod><AllowedMethod>GET</AllowedMethod><AllowedMethod>HEAD</AllowedMethod><AllowedHeader>*</AllowedHeader><ExposeHeader>ETag</ExposeHeader><MaxAgeSeconds>3600</MaxAgeSeconds></CORSRule></CORSConfiguration>' > /tmp/cors.xml &&
+      mc cors set local/$$S3_BUCKET /tmp/cors.xml &&
+      mc ilm rule add --expire-days 1 --prefix uploads/ local/$$S3_BUCKET
       "
 
   migrate:
@@ -69,13 +73,24 @@ services:
         required: false
     environment:
       APP_ENV: ${APP_ENV:-development}
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-knowledge}:${POSTGRES_PASSWORD:-knowledge_dev}@postgres:5432/${POSTGRES_DB:-knowledge_workbench}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_workbench}
+      POSTGRES_USER: ${POSTGRES_USER:-knowledge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-knowledge_dev}
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
       S3_BUCKET: ${S3_BUCKET:-knowledge-sources}
       S3_SECURE: "false"
+      S3_PRESIGN_TTL_SECONDS: ${S3_PRESIGN_TTL_SECONDS:-900}
+      MAX_UPLOAD_SIZE_BYTES: ${MAX_UPLOAD_SIZE_BYTES:-26214400}
+      CELERY_BROKER_URL: redis://redis:6379/1
+      JOB_ATTEMPT_LEASE_SECONDS: ${JOB_ATTEMPT_LEASE_SECONDS:-300}
+      OUTBOX_RELAY_INTERVAL_SECONDS: ${OUTBOX_RELAY_INTERVAL_SECONDS:-1.0}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-50}
       AI_PROVIDER: fake
       CLAUDE_MODEL: claude-opus-5
     command: ["alembic", "-c", "apps/api/alembic.ini", "upgrade", "head"]
@@ -92,13 +107,24 @@ services:
         required: false
     environment:
       APP_ENV: ${APP_ENV:-development}
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-knowledge}:${POSTGRES_PASSWORD:-knowledge_dev}@postgres:5432/${POSTGRES_DB:-knowledge_workbench}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_workbench}
+      POSTGRES_USER: ${POSTGRES_USER:-knowledge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-knowledge_dev}
       REDIS_URL: redis://redis:6379/0
       S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
       S3_BUCKET: ${S3_BUCKET:-knowledge-sources}
       S3_SECURE: "false"
+      S3_PRESIGN_TTL_SECONDS: ${S3_PRESIGN_TTL_SECONDS:-900}
+      MAX_UPLOAD_SIZE_BYTES: ${MAX_UPLOAD_SIZE_BYTES:-26214400}
+      CELERY_BROKER_URL: redis://redis:6379/1
+      JOB_ATTEMPT_LEASE_SECONDS: ${JOB_ATTEMPT_LEASE_SECONDS:-300}
+      OUTBOX_RELAY_INTERVAL_SECONDS: ${OUTBOX_RELAY_INTERVAL_SECONDS:-1.0}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-50}
       AI_PROVIDER: fake
       CLAUDE_MODEL: claude-opus-5
     ports:
@@ -115,6 +141,61 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_workbench}
+      POSTGRES_USER: ${POSTGRES_USER:-knowledge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-knowledge_dev}
+      CELERY_BROKER_URL: redis://redis:6379/1
+      JOB_ATTEMPT_LEASE_SECONDS: ${JOB_ATTEMPT_LEASE_SECONDS:-300}
+    command: ["celery", "-A", "knowledge_workbench.worker.celery_app:celery_app", "worker", "--loglevel=INFO", "--queues=source-ingest"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  relay:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_workbench}
+      POSTGRES_USER: ${POSTGRES_USER:-knowledge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-knowledge_dev}
+      CELERY_BROKER_URL: redis://redis:6379/1
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-knowledge-sources}
+      S3_SECURE: "false"
+      OUTBOX_RELAY_INTERVAL_SECONDS: ${OUTBOX_RELAY_INTERVAL_SECONDS:-1.0}
+      OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-50}
+    command: ["python", "-m", "knowledge_workbench.worker.outbox_relay"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
   web:
     build:

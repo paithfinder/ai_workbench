@@ -67,6 +67,7 @@ export function TodayOverview() {
     <section aria-labelledby="today-title">
       <PageHeader
         eyebrow="FOUNDATION · 知识空间"
+        headingId="today-title"
         title="今日学习"
         description="先确认个人知识空间的真实基础状态，再等待后续能力按日程开放。"
       />
@@ -104,11 +105,11 @@ export function TodayOverview() {
           </div>
           <article className="state-card ready-state">
             <div>
-              <p className="state-kicker">D1 · FOUNDATION READY</p>
+              <p className="state-kicker">D2 · SOURCE IMPORT READY</p>
               <h2>{query.data.space.name}已连接</h2>
             </div>
             <p>
-              基础状态为 ready。来源、任务、事件和能力数量均来自 bootstrap 接口，包括真实的零值；未开放能力不会显示为可用。
+              基础状态为 ready，D2 来源导入已开放。来源、任务、事件和能力数量均来自 bootstrap 接口，包括真实的零值；其余未开放能力不会显示为可用。
             </p>
           </article>
         </>

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -25,4 +25,4 @@ def configure_logging(level: str) -> None:
 
 
 def get_logger(**initial_values: Any) -> structlog.stdlib.BoundLogger:
-    return structlog.get_logger().bind(**initial_values)
+    return cast(structlog.stdlib.BoundLogger, structlog.get_logger().bind(**initial_values))

@@ -1,6 +1,6 @@
 # 自序 · 个人知识工作台
 
-D1 建立两周 MVP 的可运行基础，优先服务个人知识闭环，同时为后续检索、评测与可信引用保留清晰边界。
+D1 建立两周 MVP 的可运行基础；D2 在此基础上开放真实来源导入，优先服务个人知识闭环，同时为后续解析、检索、评测与可信引用保留清晰边界。
 
 ## D1 范围
 
@@ -13,6 +13,18 @@ D1 建立两周 MVP 的可运行基础，优先服务个人知识闭环，同时
 - Playwright Web/API 可达性 smoke 测试与 CI 基线。
 
 架构决策见 [`docs/adr/`](docs/adr/)。
+
+## D2 范围
+
+- `/import` 使用 bootstrap 返回的默认知识空间 ID，不在前端写死空间。
+- 仅支持 PDF（`.pdf` / `application/pdf`）、Markdown（`.md` / `text/markdown`）和纯文本（`.txt` / `text/plain`），浏览器先校验扩展名、MIME、非空和 25 MiB 上限。
+- 浏览器使用 Web Crypto 计算 SHA-256，创建来源、申请上传预留，并按服务端返回的 URL、headers 与 policy fields 通过 XHR multipart `POST` 到 MinIO，同时展示上传进度；文件字段始终最后追加，浏览器自行生成 multipart boundary。单次导入保留 source/version 和稳定的 create/reserve/complete 幂等键；对象上传或 complete 失败后可继续同一会话，不会重复创建 source。
+- 哈希、API 与 XHR 使用同一个取消信号；上传有不晚于 reservation expiry 的超时和显式取消。create、reserve、complete 和 retry 使用各自稳定的 `Idempotency-Key`；complete 后轮询真实任务状态，retry 结果不确定时会查询 job 对账。
+- 最近来源记录严格来自当前 `list_sources` 的 source 字段。该响应不含 latest version / job，因此持久列表不会推断或伪造上传/任务状态；刚完成的当前上传会在本页独立保留 source、version 与已知 job 并继续轮询。
+- 成功态只表示“原件已保存，等待 D3 解析”，不会生成或展示虚假的解析结果。
+- Compose 为本地 Web 来源配置 MinIO bucket CORS，以支持浏览器直传。
+
+D2 不包含正文解析、页数/段落抽取、摘要、知识点或向量化；这些仍属于 D3 及后续范围。
 
 ## 一键 Compose 启动
 
@@ -101,15 +113,18 @@ pnpm typecheck
 pnpm test
 pnpm build
 
-# Web/API 已运行后执行 smoke
+# Web/API 已运行后执行 smoke 与真实 PDF/MD/TXT 导入 E2E
 pnpm exec playwright test --config tests/e2e/playwright.config.ts
+
+# 只执行 D2 来源导入 E2E
+pnpm exec playwright test --config tests/e2e/playwright.config.ts tests/e2e/source-import.spec.ts
 ```
 
 CI 会使用 PostgreSQL 服务执行迁移与后端检查，并通过 Compose 启动预期服务后执行 Playwright smoke。
 
 ## 尚未实现
 
-- 文件导入、解析、切分、向量化和可重试的异步处理流水线。
+- 文件解析、切分、向量化，以及解析阶段的可重试异步处理流水线。
 - 知识候选的人工审核、知识树、全文/向量混合检索和带引用问答。
 - 间隔复习、活动中心的完整业务能力与 RAG 指标评分流水线。
 - 多空间创建/切换、团队协作、用户身份、权限与配额管理。

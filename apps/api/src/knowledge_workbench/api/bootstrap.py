@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_workbench.api.dependencies import SessionDependency
 from knowledge_workbench.db.models import ActivityEvent, Job, KnowledgeSpace, Source
 
 router = APIRouter(prefix="/api/v1", tags=["bootstrap"])
@@ -22,7 +23,7 @@ class KnowledgeSpaceResponse(BaseModel):
 
 
 class CapabilityResponse(BaseModel):
-    source_import: bool = False
+    source_import: bool = True
     extraction_review: bool = False
     knowledge_tree: bool = False
     trusted_qa: bool = False
@@ -43,10 +44,6 @@ class BootstrapResponse(BaseModel):
     foundation_status: Literal["ready"] = "ready"
 
 
-async def get_session() -> AsyncSession:
-    raise RuntimeError("Database session dependency was not installed")
-
-
 async def _load_default_space(session: AsyncSession) -> KnowledgeSpace:
     result = await session.execute(
         select(KnowledgeSpace).where(KnowledgeSpace.slug == DEFAULT_SPACE_SLUG)
@@ -60,17 +57,13 @@ async def _load_default_space(session: AsyncSession) -> KnowledgeSpace:
     response_model=KnowledgeSpaceResponse,
     operation_id="get_default_knowledge_space",
 )
-async def default_space(
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> KnowledgeSpaceResponse:
+async def default_space(session: SessionDependency) -> KnowledgeSpaceResponse:
     space = await _load_default_space(session)
     return KnowledgeSpaceResponse(id=space.id, slug=space.slug, name=space.name)
 
 
 @router.get("/bootstrap", response_model=BootstrapResponse, operation_id="get_bootstrap")
-async def bootstrap(
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> BootstrapResponse:
+async def bootstrap(session: SessionDependency) -> BootstrapResponse:
     space = await _load_default_space(session)
     source_count = await session.scalar(
         select(func.count()).select_from(Source).where(Source.space_id == space.id)

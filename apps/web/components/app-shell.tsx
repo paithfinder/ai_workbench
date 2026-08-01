@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <strong>知识管理工作台</strong>
         </div>
         <div className="top-actions">
-          <span className="local-pill">LOCAL · D1</span>
+          <span className="local-pill">LOCAL · D2</span>
           <span className="avatar" aria-label="当前用户 MT">MT</span>
         </div>
       </header>
@@ -110,8 +110,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <p className="sidebar-note">
-          D1 · 应用壳层
-          <span>后续能力按开发日程逐步接入</span>
+          D2 · 原文入库
+          <span>PDF、Markdown 与纯文本可真实导入</span>
         </p>
       </aside>
 

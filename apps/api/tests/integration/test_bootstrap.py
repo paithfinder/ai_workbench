@@ -17,7 +17,7 @@ def test_bootstrap_reads_seeded_default_space_and_real_zero_counts() -> None:
             "name": "我的知识库",
         },
         "capabilities": {
-            "source_import": False,
+            "source_import": True,
             "extraction_review": False,
             "knowledge_tree": False,
             "trusted_qa": False,

@@ -2,13 +2,14 @@ type PageHeaderProps = {
   eyebrow: string;
   title: string;
   description: string;
+  headingId?: string;
 };
 
-export function PageHeader({ eyebrow, title, description }: PageHeaderProps) {
+export function PageHeader({ eyebrow, title, description, headingId = "page-title" }: PageHeaderProps) {
   return (
     <header className="page-head">
       <p className="eyebrow">{eyebrow}</p>
-      <h1>{title}</h1>
+      <h1 id={headingId}>{title}</h1>
       <p className="page-subtitle">{description}</p>
     </header>
   );
