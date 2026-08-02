@@ -197,19 +197,21 @@ class SourceParseWorker(JobRunner):
                     )
                 digest.update(chunk)
                 handle.write(chunk)
-        finally:
             handle.close()
-        after = await self._storage.stat(version.storage_key)
-        if (
-            before.etag != after.etag
-            or before.size != after.size
-            or size != before.size
-            or digest.hexdigest() != version.content_sha256
-        ):
+            after = await self._storage.stat(version.storage_key)
+            if (
+                before.etag != after.etag
+                or before.size != after.size
+                or size != before.size
+                or digest.hexdigest() != version.content_sha256
+            ):
+                raise PermanentJobError(
+                    "source_object_changed", "The immutable source failed its integrity check."
+                )
+        except BaseException:
+            handle.close()
             await asyncio.to_thread(path.unlink, missing_ok=True)
-            raise PermanentJobError(
-                "source_object_changed", "The immutable source failed its integrity check."
-            )
+            raise
         return path
 
     async def _write_artifacts(

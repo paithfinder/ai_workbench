@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import tempfile
+from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
+import pytest
 from fake_storage import FakeObjectStorage
 
 from knowledge_workbench.application.canonical_document import (
@@ -27,7 +32,7 @@ from knowledge_workbench.db.models import (
     SourceVersion,
 )
 from knowledge_workbench.infrastructure.parsing.fake import DeterministicFakeParser
-from knowledge_workbench.worker.job_runner import ClaimToken
+from knowledge_workbench.worker.job_runner import ClaimToken, PermanentJobError
 from knowledge_workbench.worker.source_parse import SourceParseWorker
 
 
@@ -201,6 +206,56 @@ async def test_stale_attempt_cannot_replace_winner_artifact_pointers() -> None:
     assert job.status == JobStatus.SUCCEEDED.value
     assert attempt.status == JobAttemptStatus.SUCCEEDED.value
     assert len(winner_session.added) == 1
+
+
+class _OverflowStorage(FakeObjectStorage):
+    def __init__(self) -> None:
+        super().__init__()
+        self.created_temp_path: Path | None = None
+
+    async def iter_bytes(self, key: str) -> AsyncIterator[bytes]:
+        del key
+        yield b"123456"
+
+
+async def test_download_removes_partial_temp_file_when_stream_exceeds_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = _OverflowStorage()
+    storage.put("source.txt", b"12345", "text/plain")
+    version = SourceVersion(
+        id=uuid4(),
+        source_id=uuid4(),
+        version_number=1,
+        storage_key="source.txt",
+        content_sha256="0" * 64,
+        acquisition_type="upload",
+        acquisition_metadata={},
+        processing_status="ready",
+        parse_status=ParseStatus.PARSING.value,
+    )
+    worker = SourceParseWorker(
+        Settings(app_env="test", parse_max_source_bytes=5),
+        DeterministicFakeParser(),
+        storage,
+    )
+    original = tempfile.NamedTemporaryFile
+
+    def tracking_temp_file(*args: object, **kwargs: object) -> Any:
+        handle = original(*args, **kwargs)
+        storage.created_temp_path = Path(handle.name)
+        return handle
+
+    monkeypatch.setattr(
+        "knowledge_workbench.worker.source_parse.tempfile.NamedTemporaryFile",
+        tracking_temp_file,
+    )
+
+    with pytest.raises(PermanentJobError, match="Source exceeds parser size limit"):
+        await worker._download(version, ".txt")  # noqa: SLF001
+
+    assert storage.created_temp_path is not None
+    assert not storage.created_temp_path.exists()
 
 
 async def test_artifact_keys_are_attempt_scoped_and_stale_objects_are_deleted() -> None:
