@@ -208,6 +208,18 @@ class SourceIngestionService:
             )
         )
         if existing is not None:
+            if (
+                existing.upload_request_hash is None
+                or existing.upload_expires_at is None
+                or existing.upload_storage_key is None
+                or existing.media_type is None
+                or existing.size_bytes is None
+            ):
+                raise AppError(
+                    "upload_reservation_inconsistent",
+                    "The upload reservation is missing required upload identity.",
+                    status_code=500,
+                )
             if existing.upload_request_hash != request_hash:
                 raise AppError(
                     "idempotency_conflict",
@@ -313,6 +325,19 @@ class SourceIngestionService:
             job = await self._get_ingest_job(session, space_id, version.id)
             return CompletedUpload(source, version, job)
 
+        if (
+            version.original_filename is None
+            or version.expected_content_sha256 is None
+            or version.upload_expires_at is None
+            or version.upload_storage_key is None
+            or version.media_type is None
+            or version.size_bytes is None
+        ):
+            raise AppError(
+                "upload_reservation_inconsistent",
+                "The upload reservation is missing required upload identity.",
+                status_code=500,
+            )
         suffix = PurePath(version.original_filename).suffix.lower()
         immutable_key = (
             f"sources/{space_id}/{source_id}/versions/{version.id}/"

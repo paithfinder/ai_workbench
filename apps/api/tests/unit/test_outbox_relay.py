@@ -31,6 +31,7 @@ class FakeSession:
 class RecordingPublisher:
     def __init__(self, *, fail: bool = False) -> None:
         self.payloads: list[dict[str, object]] = []
+        self.parse_payloads: list[dict[str, object]] = []
         self.cleaned: list[str] = []
         self.fail = fail
 
@@ -38,6 +39,11 @@ class RecordingPublisher:
         if self.fail:
             raise RuntimeError("broker unavailable")
         self.payloads.append(dict(payload))
+
+    def publish_source_parse(self, payload):
+        if self.fail:
+            raise RuntimeError("broker unavailable")
+        self.parse_payloads.append(dict(payload))
 
     async def cleanup_staging(self, storage_key: str) -> None:
         if self.fail:
@@ -72,6 +78,19 @@ async def test_relay_marks_event_published_after_publish() -> None:
     assert event.published_at is not None
     assert event.attempt_count == 1
     assert event.last_error is None
+
+
+async def test_relay_publishes_source_parse_event() -> None:
+    event = _event()
+    event.event_type = "job.source_parse.requested"
+    publisher = RecordingPublisher()
+    session = FakeSession([event])
+
+    count = await relay_batch(session, publisher, batch_size=50)  # type: ignore[arg-type]
+
+    assert count == 1
+    assert publisher.parse_payloads == [event.payload]
+    assert event.published_at is not None
 
 
 async def test_relay_deletes_staging_object_for_cleanup_event() -> None:

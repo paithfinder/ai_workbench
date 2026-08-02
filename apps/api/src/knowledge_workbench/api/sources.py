@@ -58,13 +58,17 @@ class SourceVersionResponse(BaseModel):
     id: UUID
     source_id: UUID
     version_number: int
-    original_filename: str
-    media_type: str
-    size_bytes: int
+    acquisition_type: str
+    source_uri: str | None
+    acquisition_metadata: dict[str, Any]
+    original_filename: str | None
+    media_type: str | None
+    size_bytes: int | None
     content_sha256: str | None
     processing_status: str
     parse_status: str
-    upload_expires_at: datetime
+    current_parse_artifact_id: UUID | None
+    upload_expires_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
 
@@ -109,12 +113,16 @@ def _version_response(version: SourceVersion) -> SourceVersionResponse:
         id=version.id,
         source_id=version.source_id,
         version_number=version.version_number,
+        acquisition_type=version.acquisition_type,
+        source_uri=version.source_uri,
+        acquisition_metadata=version.acquisition_metadata,
         original_filename=version.original_filename,
         media_type=version.media_type,
         size_bytes=version.size_bytes,
         content_sha256=version.content_sha256,
         processing_status=version.processing_status,
         parse_status=version.parse_status,
+        current_parse_artifact_id=version.current_parse_artifact_id,
         upload_expires_at=version.upload_expires_at,
         completed_at=version.completed_at,
         created_at=version.created_at,
@@ -244,6 +252,8 @@ async def reserve_upload(
             ),
             idempotency_key=idempotency_key,
         )
+    if reservation.version.upload_expires_at is None:
+        raise RuntimeError("Upload reservation has no expiration time")
     return UploadReservationResponse(
         version=_version_response(reservation.version),
         upload_url=reservation.upload.url,

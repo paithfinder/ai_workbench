@@ -1,0 +1,364 @@
+{
+  "schema_version": 1,
+  "quote_hash_contract": "lowercase SHA-256 of exact, unnormalized UTF-8 quote bytes",
+  "page_numbering": "1-based",
+  "provenance": {
+    "origin": "Original synthetic fixtures generated for this repository; no third-party text, images, fonts, or sample files were copied.",
+    "license_safety": "Project-owned test data; distributed under the repository license.",
+    "pdf_generation": "Minimal PDF 1.4 bytes generated deterministically with Python standard-library byte assembly. Text PDFs use built-in Helvetica; image_only.pdf embeds a generated 8x8 grayscale checker pattern compressed with zlib."
+  },
+  "samples": [
+    {
+      "id": "markdown_nested_chinese",
+      "filename": "nested_chinese.md",
+      "size_bytes": 259,
+      "sha256": "abe3e7cd1d07b959adf0e887cf0e97d97f5310c7fd9f720b9ca5761535b16d1f",
+      "media_type": "text/markdown",
+      "format": "markdown",
+      "valid_format": true,
+      "expected_outcome": "success",
+      "page_count": null,
+      "headings": [
+        {
+          "level": 1,
+          "text": "项目北极星"
+        },
+        {
+          "level": 2,
+          "text": "采集阶段"
+        },
+        {
+          "level": 3,
+          "text": "校验规则"
+        },
+        {
+          "level": 2,
+          "text": "检索阶段"
+        }
+      ],
+      "ordered_quotes": [
+        {
+          "text": "项目北极星",
+          "sha256_utf8": "664573c9f32e24bb6f96173d9ec407062ad08982d3dc66c242fd5b005323d46a"
+        },
+        {
+          "text": "这是一个 UTF-8 Markdown 回归样本，保留中文标点与术语。",
+          "sha256_utf8": "9c2791c16b53dac116e52d7bb00be827be05a5d4be5ab83736e9e4a894c8d119"
+        },
+        {
+          "text": "采集阶段",
+          "sha256_utf8": "b5548382eee0ee19ddee8f3b3e4ffb65a597c7e66150c64768c9bdca5bfe2a73"
+        },
+        {
+          "text": "第一步：导入可信来源。",
+          "sha256_utf8": "52f90f12ab2e5399bda3e930dc820cdec5a8ab7476f293a0a808a507585f83d6"
+        },
+        {
+          "text": "校验规则",
+          "sha256_utf8": "dc276660650d47d0a8b44bf53f5a8f4874b4785c9130aca56ee9d7ed79a04384"
+        },
+        {
+          "text": "哈希必须稳定，引用必须可追溯。",
+          "sha256_utf8": "7b30c776149fae1a6f39a34e8a1a1947b3270073c6bdef303a744b7cba2af256"
+        },
+        {
+          "text": "检索阶段",
+          "sha256_utf8": "7dc2247204cc1a300402e21330dd2958c0f3820ba21bf5ff87bd296226b49851"
+        },
+        {
+          "text": "答案应附带原文引用。",
+          "sha256_utf8": "46eb4a6b9a5a5f692eb484365d4aba0157e9d4f5bf79698f2c2376465d735fff"
+        }
+      ],
+      "notes": "UTF-8 without BOM; nested headings and original Chinese text."
+    },
+    {
+      "id": "text_ordered_unicode",
+      "filename": "ordered_unicode.txt",
+      "size_bytes": 126,
+      "sha256": "ccbb28f982393b9b0d498b8bdecf65ca72bda816f3908c3dffa7b0cef9351612",
+      "media_type": "text/plain",
+      "format": "text",
+      "valid_format": true,
+      "expected_outcome": "success",
+      "page_count": null,
+      "headings": [],
+      "ordered_quotes": [
+        {
+          "text": "1. Capture the source exactly.",
+          "sha256_utf8": "6820726434c9232d56ed8463ce5086f64e458b120809008b0a3c58e95b7f223d"
+        },
+        {
+          "text": "2. Preserve ordered paragraphs and café text.",
+          "sha256_utf8": "bae0d11c3465eeac7e17bc3b0849fa429537b601bd435426a12a165993a43dd7"
+        },
+        {
+          "text": "3. Keep Unicode symbols: Ω, →, and 中文.",
+          "sha256_utf8": "1bcdb10009fa491405cef9971461836edec00a9a6ba45802c4c4b3c545f95785"
+        }
+      ],
+      "notes": "UTF-8 without BOM; ordered paragraphs contain no C0/C1 controls except LF separators."
+    },
+    {
+      "id": "html_main_table",
+      "filename": "static_main_table.html",
+      "size_bytes": 726,
+      "sha256": "bcdc4bb1aa88496c976f296a125b24b926d53b6fcea631d1b69bab040dcb0fa5",
+      "media_type": "text/html",
+      "format": "html",
+      "valid_format": true,
+      "expected_outcome": "success",
+      "page_count": null,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Quarterly Field Notes"
+        },
+        {
+          "level": 2,
+          "text": "Measured Results"
+        }
+      ],
+      "ordered_quotes": [
+        {
+          "text": "Quarterly Field Notes",
+          "sha256_utf8": "199890ce8a09b656fd023dcbffefe60cac8a2d554a448b068cac10b016bf2207"
+        },
+        {
+          "text": "The canonical article begins with this visible paragraph.",
+          "sha256_utf8": "93ee7a477ce74402b99657c63ee6df8c1e16b890af4b49a99c2a52aee220b1e9"
+        },
+        {
+          "text": "Measured Results",
+          "sha256_utf8": "56cc99da10315fe13c710bc2241d87675967b08cef95e0e26ed2179166860776"
+        },
+        {
+          "text": "Region",
+          "sha256_utf8": "d3a008ef1335692d9d045175ba9ea1dcd39ae48da9e2043a9baabad6c3818c28"
+        },
+        {
+          "text": "Score",
+          "sha256_utf8": "38e5a46cbc5ad32842ac60a4f1425ac9b31c06bac685f446a06ab72b87de31ed"
+        },
+        {
+          "text": "North",
+          "sha256_utf8": "43f853bbb592860098a76140c1770ee2add66f4720453d64dcf225178e238e57"
+        },
+        {
+          "text": "42",
+          "sha256_utf8": "73475cb40a568e8da8a045ced110137e159f890ac4da883b6b17dc651b3a8049"
+        },
+        {
+          "text": "South",
+          "sha256_utf8": "0dd2dae4dd83ae3085cd80ac1bfc28e8d76ba51ddfd972c269fe9f98a85c099a"
+        },
+        {
+          "text": "37",
+          "sha256_utf8": "7a61b53701befdae0eeeffaecc73f14e20b537bb0f8b91ad7c2936dc63562b25"
+        },
+        {
+          "text": "Final visible conclusion for deterministic extraction.",
+          "sha256_utf8": "2e0998c2cb6b9c30bcdd3a36f746096eded4c94a6de241b22c213194f9521be7"
+        }
+      ],
+      "excluded_text": [
+        "SCRIPT MUST NOT APPEAR",
+        "SECRET NAVIGATION COPY",
+        "JSON SCRIPT MUST NOT APPEAR"
+      ],
+      "notes": "Canonical user-visible content is inside main; nav and script payloads are exclusions."
+    },
+    {
+      "id": "pdf_single_page_text",
+      "filename": "single_page_text.pdf",
+      "size_bytes": 814,
+      "sha256": "7e646c6b31dfca79072180ee190c7d9ea05a565034fc9fe7a19be82ef86c9499",
+      "media_type": "application/pdf",
+      "format": "pdf",
+      "valid_format": true,
+      "expected_outcome": "success",
+      "page_count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "D3 Parser Fixture Title",
+          "page": 1
+        }
+      ],
+      "ordered_quotes": [
+        {
+          "text": "D3 Parser Fixture Title",
+          "sha256_utf8": "671811431e7173a8be46ed1d43dc7d26ef841a089bde16b523a74f9d2624dad8",
+          "page": 1
+        },
+        {
+          "text": "This paragraph is known text on page one.",
+          "sha256_utf8": "54ccbd9371cc749ae699b8e191b8134929a0b41e4d32a296e0a816e3a3691b24",
+          "page": 1
+        }
+      ],
+      "notes": "Valid PDF 1.4 with Helvetica text operators and 1-based page anchors."
+    },
+    {
+      "id": "pdf_multipage_text",
+      "filename": "multipage_text.pdf",
+      "size_bytes": 1142,
+      "sha256": "0867331f1213f159387862cd7a11b59e5db44787353bf8da351054d38a525f54",
+      "media_type": "application/pdf",
+      "format": "pdf",
+      "valid_format": true,
+      "expected_outcome": "success",
+      "page_count": 2,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Multipage Anchor Alpha",
+          "page": 1
+        },
+        {
+          "level": 1,
+          "text": "Multipage Anchor Beta",
+          "page": 2
+        }
+      ],
+      "ordered_quotes": [
+        {
+          "text": "Multipage Anchor Alpha",
+          "sha256_utf8": "f14aa84dbee53d4e714d00a7762b3bbf4988d0eef9448d7369940ffef6d23032",
+          "page": 1
+        },
+        {
+          "text": "First page evidence belongs to alpha.",
+          "sha256_utf8": "8d59a5ec9a5f0f7538085c406e39823105e312b6ada635079ee7e593b041b085",
+          "page": 1
+        },
+        {
+          "text": "Multipage Anchor Beta",
+          "sha256_utf8": "db013a307c930a6591a622c6b2e60730c88ebc8ddb8e34f74b21c506a5d7af0e",
+          "page": 2
+        },
+        {
+          "text": "Second page evidence belongs to beta.",
+          "sha256_utf8": "5fd8d04af3ecb56fb6d694c04e9f7834c19cb27566f8e101ef8451ab11b09f25",
+          "page": 2
+        }
+      ],
+      "notes": "Valid two-page PDF; every quote carries an explicit 1-based page anchor."
+    },
+    {
+      "id": "pdf_simple_table",
+      "filename": "simple_table.pdf",
+      "size_bytes": 1039,
+      "sha256": "b4e940f7e269cf9024c49afbc7963ce27308565eb8b2f85435afacda3bc9941a",
+      "media_type": "application/pdf",
+      "format": "pdf",
+      "valid_format": true,
+      "expected_outcome": "success",
+      "page_count": 1,
+      "headings": [
+        {
+          "level": 1,
+          "text": "Simple Inventory Table",
+          "page": 1
+        }
+      ],
+      "ordered_quotes": [
+        {
+          "text": "Simple Inventory Table",
+          "sha256_utf8": "9e078fe03d4402e0662fc1c1c12b3718ff3c8cd7f1113ec7c5d54a9f508af7ac",
+          "page": 1
+        },
+        {
+          "text": "Item",
+          "sha256_utf8": "652bcc3a478428893cc505ae19f847b49be52f861bedc64bb192ceed409fa733",
+          "page": 1
+        },
+        {
+          "text": "Count",
+          "sha256_utf8": "37bac4952becf21ac5838d3c9ba82811bc421c857571e89634dcbe346681d54c",
+          "page": 1
+        },
+        {
+          "text": "Apples",
+          "sha256_utf8": "007f1d79a45f16841559163c2b80f037f03b3c5a644764ae9559a2cbed78218d",
+          "page": 1
+        },
+        {
+          "text": "12",
+          "sha256_utf8": "6b51d431df5d7f141cbececcf79edf3dd861c3b4069f0b11661a3eefacbba918",
+          "page": 1
+        },
+        {
+          "text": "Pears",
+          "sha256_utf8": "bf5b95c165e0466d3144a7fe398672381bd46506051164cd33440f1068936079",
+          "page": 1
+        },
+        {
+          "text": "7",
+          "sha256_utf8": "7902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451",
+          "page": 1
+        }
+      ],
+      "expected_table": {
+        "page": 1,
+        "rows": [
+          [
+            "Item",
+            "Count"
+          ],
+          [
+            "Apples",
+            "12"
+          ],
+          [
+            "Pears",
+            "7"
+          ]
+        ]
+      },
+      "notes": "Valid one-page PDF; ruled 2-column table uses vector lines and separate text cells."
+    },
+    {
+      "id": "pdf_image_only",
+      "filename": "image_only.pdf",
+      "size_bytes": 842,
+      "sha256": "13390998e1eb91523eb3bd39b3552873b6ece44f6188951df46f1d6e5081dfcb",
+      "media_type": "application/pdf",
+      "format": "pdf",
+      "valid_format": true,
+      "expected_outcome": "no_extractable_text",
+      "page_count": 1,
+      "headings": [],
+      "ordered_quotes": [],
+      "notes": "Valid one-page PDF containing only a small embedded 8x8 grayscale image; no font, text object, hidden text, or OCR expectation."
+    },
+    {
+      "id": "text_empty_failure",
+      "filename": "empty.txt",
+      "size_bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "media_type": "text/plain",
+      "format": "text",
+      "valid_format": true,
+      "expected_outcome": "failure_empty",
+      "page_count": null,
+      "headings": [],
+      "ordered_quotes": [],
+      "notes": "Valid zero-byte text file intended to exercise the empty-input failure path."
+    },
+    {
+      "id": "pdf_malformed_failure",
+      "filename": "malformed.pdf",
+      "size_bytes": 77,
+      "sha256": "42eeab852604b9513c797fd53f36f3ae85252fa3c92f360eefa5ecafbebf61b9",
+      "media_type": "application/pdf",
+      "format": "pdf",
+      "valid_format": false,
+      "expected_outcome": "failure_malformed",
+      "page_count": null,
+      "headings": [],
+      "ordered_quotes": [],
+      "notes": "Intentionally invalid PDF-like bytes: header and EOF marker are present, but xref, trailer, catalog, pages, and objects are absent."
+    }
+  ]
+}

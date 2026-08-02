@@ -21,11 +21,11 @@ for (const fixture of [
     await page.getByRole("button", { name: "校验并导入" }).click();
 
     await expect(
-      page.getByRole("heading", { name: "原件已保存，等待 D3 解析" }),
+      page.getByRole("heading", { name: "来源任务已完成" }),
     ).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByLabel("本页当前上传")).toContainText(fixture.filename);
-    await expect(page.getByText("本页面不会展示伪造的解析结果。", { exact: false })).toBeVisible();
+    await expect(page.getByLabel("本页当前导入")).toContainText(fixture.filename);
+    await expect(page.getByRole("link", { name: "查看来源详情" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "最近来源记录" })).toBeVisible();
-    await expect(page.getByText("接口未返回最新版本或任务", { exact: false })).toBeVisible();
+    await expect(page.getByText("打开来源详情可查看真实版本", { exact: false })).toBeVisible();
   });
 }

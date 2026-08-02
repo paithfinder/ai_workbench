@@ -53,12 +53,16 @@ const version = {
   id: ids.version,
   source_id: ids.source,
   version_number: 1,
+  acquisition_type: "upload",
+  source_uri: null,
+  acquisition_metadata: {},
   original_filename: "真实笔记.md",
   media_type: "text/markdown",
   size_bytes: 8,
   content_sha256: "a".repeat(64),
   processing_status: "pending",
   parse_status: "not_started",
+  current_parse_artifact_id: null,
   upload_expires_at: "2099-07-31T12:15:00Z",
   completed_at: now,
   created_at: now,
@@ -152,10 +156,10 @@ describe("ImportWorkspace", () => {
     expect(screen.getByText("text/markdown")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "校验并导入" }));
 
-    expect(await screen.findByRole("heading", { name: "原件已保存，等待 D3 解析" })).toBeInTheDocument();
-    expect(screen.getByLabelText("本页当前上传")).toHaveTextContent("真实笔记");
-    expect(screen.getByLabelText("本页当前上传")).toHaveTextContent(ids.job);
-    expect(screen.getByText(/本页面不会展示伪造的解析结果/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "来源任务已完成" })).toBeInTheDocument();
+    expect(screen.getByLabelText("本页当前导入")).toHaveTextContent("真实笔记");
+    expect(screen.getByLabelText("本页当前导入")).toHaveTextContent(ids.job);
+    expect(screen.getByText(/进入来源详情查看独立的版本解析状态/)).toBeInTheDocument();
     expect(calculateFileSha256).toHaveBeenCalledWith(file, expect.any(AbortSignal));
     expect(uploadFileWithProgress).toHaveBeenCalledWith(expect.objectContaining({
       url: "http://storage.test/reserved",
@@ -191,7 +195,7 @@ describe("ImportWorkspace", () => {
 
     expect(await screen.findByRole("button", { name: "继续导入" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "继续导入" }));
-    expect(await screen.findByRole("heading", { name: "原件已保存，等待 D3 解析" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "来源任务已完成" })).toBeInTheDocument();
 
     const createCalls = fetchMock.mock.calls.filter(([url, init]) =>
       String(url).endsWith(`/knowledge-spaces/${ids.space}/sources`) && init?.method === "POST",
@@ -247,7 +251,7 @@ describe("ImportWorkspace", () => {
     await userEvent.click(screen.getByRole("button", { name: "校验并导入" }));
     expect(await screen.findByRole("button", { name: "继续导入" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "继续导入" }));
-    expect(await screen.findByRole("heading", { name: "原件已保存，等待 D3 解析" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "来源任务已完成" })).toBeInTheDocument();
 
     const reserveCalls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith(`/sources/${ids.source}/upload-reservations`));
     expect(reserveCalls).toHaveLength(2);
@@ -319,7 +323,7 @@ describe("ImportWorkspace", () => {
     expect(screen.getByText("对象入库暂时失败")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "重试失败任务" }));
 
-    expect(await screen.findByRole("heading", { name: "原件已保存，任务正在排队" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "任务正在排队" })).toBeInTheDocument();
     const retryCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith(`/jobs/${ids.job}/retry`));
     expect(new Headers((retryCall?.[1] as RequestInit).headers).has("Idempotency-Key")).toBe(true);
   });
@@ -369,9 +373,40 @@ describe("ImportWorkspace", () => {
     expect(await screen.findByRole("heading", { name: "入库任务失败" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "重试失败任务" }));
 
-    expect(await screen.findByRole("heading", { name: "原件已保存，任务正在排队" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "任务正在排队" })).toBeInTheDocument();
     expect(jobReads).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText("无法连接知识工作台 API")).not.toBeInTheDocument();
+  });
+
+  it("imports web and pasted text from accessible tabs using exact API fields", async () => {
+    const fetchMock = successfulFetch();
+    const webVersion = { ...version, acquisition_type: "web_fetch", source_uri: "https://example.com/note", original_filename: null, upload_expires_at: null };
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith(`/knowledge-spaces/${ids.space}/sources/web`)) return Promise.resolve(json({ source: { ...source, kind: "web", title: "网页笔记" }, version: webVersion, job: { id: ids.job, status: "queued" } }, 202));
+      if (url.endsWith(`/knowledge-spaces/${ids.space}/sources/pasted-text`)) return Promise.resolve(json({ source: { ...source, kind: "pasted_text", title: "文本笔记" }, version: { ...webVersion, acquisition_type: "pasted_text", source_uri: null }, job: { id: ids.job, status: "queued" } }, 202));
+      return successfulFetch()(input, init);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWorkspace();
+
+    const tablist = await screen.findByRole("tablist", { name: "来源类型" });
+    expect(tablist).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "网页" }));
+    await userEvent.type(screen.getByLabelText("来源标题"), "网页笔记");
+    await userEvent.type(screen.getByLabelText("网页地址"), "https://example.com/note");
+    await userEvent.click(screen.getByRole("button", { name: "导入网页" }));
+    expect(await screen.findByRole("link", { name: "查看来源详情" })).toHaveAttribute("href", `/sources/${ids.source}`);
+
+    const webCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/sources/web"));
+    expect(JSON.parse(String((webCall?.[1] as RequestInit).body))).toEqual({ title: "网页笔记", url: "https://example.com/note" });
+
+    await userEvent.click(screen.getByRole("tab", { name: "粘贴文本" }));
+    await userEvent.type(screen.getByLabelText("来源标题"), "文本笔记");
+    await userEvent.type(screen.getByLabelText("正文"), "真实正文");
+    await userEvent.click(screen.getByRole("button", { name: "导入文本" }));
+    const textCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/sources/pasted-text"));
+    expect(JSON.parse(String((textCall?.[1] as RequestInit).body))).toEqual({ title: "文本笔记", text: "真实正文" });
   });
 
   it("renders recent sources returned by the current default space", async () => {
@@ -383,8 +418,8 @@ describe("ImportWorkspace", () => {
 
     expect(await screen.findByText("真实笔记")).toBeInTheDocument();
     expect(screen.getByText("来源可用")).toBeInTheDocument();
-    expect(screen.getByText(/接口未返回最新版本或任务/)).toBeInTheDocument();
-    expect(screen.queryByLabelText("本页当前上传")).not.toBeInTheDocument();
+    expect(screen.getByText(/打开来源详情可查看真实版本/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("本页当前导入")).not.toBeInTheDocument();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });
 
@@ -419,7 +454,7 @@ describe("ImportWorkspace", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole("button", { name: "重试连接" }));
 
-    expect(await screen.findByRole("heading", { name: "选择原始文件" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "选择来源类型" })).toBeInTheDocument();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
   });
 });

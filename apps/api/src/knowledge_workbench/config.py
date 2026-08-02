@@ -40,9 +40,24 @@ class Settings(BaseSettings):
     s3_public_endpoint: str = "http://localhost:9000"
     s3_presign_ttl_seconds: int = Field(default=900, gt=0, le=604800)
     max_upload_size_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    max_pasted_text_size_bytes: int = Field(default=1 * 1024 * 1024, gt=0)
+    web_fetch_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
+    web_fetch_total_timeout_seconds: float = Field(default=15.0, gt=0, le=300)
+    web_fetch_max_body_bytes: int = Field(default=5 * 1024 * 1024, gt=0)
+    web_fetch_max_redirects: int = Field(default=5, ge=0, le=20)
 
     celery_broker_url: str = "redis://localhost:6379/1"
     job_attempt_lease_seconds: int = Field(default=300, gt=0)
+    parse_attempt_lease_seconds: int = Field(default=1800, gt=0)
+    parse_heartbeat_seconds: int = Field(default=30, gt=0)
+    parse_timeout_seconds: int = Field(default=1800, gt=0)
+    parse_max_pages: int = Field(default=200, gt=0)
+    parse_max_source_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
+    parse_enable_ocr: bool = True
+    parse_ocr_languages: list[str] = ["en", "zh"]
+    parse_artifact_prefix: str = "artifacts"
+    parser_name: Literal["docling"] = "docling"
+    parser_version: str = "2.117.0"
     outbox_relay_interval_seconds: float = Field(default=1.0, gt=0)
     outbox_batch_size: int = Field(default=50, gt=0, le=500)
 

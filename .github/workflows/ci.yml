@@ -65,6 +65,12 @@ jobs:
         run: uv run --package knowledge-workbench-api ruff check apps/api
       - name: Type-check backend
         run: uv run --package knowledge-workbench-api mypy apps/api/src
+      - name: Run D3 fixture and parser contract regressions
+        run: >-
+          uv run --package knowledge-workbench-api pytest
+          apps/api/tests/unit/test_d3_fixture_manifest.py
+          apps/api/tests/unit/test_source_parsing.py
+          apps/api/tests/integration/test_docling_parser.py
       - name: Run backend unit tests
         run: uv run --package knowledge-workbench-api pytest apps/api/tests/unit
       - name: Replay migrations

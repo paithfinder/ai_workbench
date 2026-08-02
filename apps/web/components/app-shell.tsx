@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <strong>知识管理工作台</strong>
         </div>
         <div className="top-actions">
-          <span className="local-pill">LOCAL · D2</span>
+          <span className="local-pill">LOCAL · D3</span>
           <span className="avatar" aria-label="当前用户 MT">MT</span>
         </div>
       </header>
@@ -92,7 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <div className="nav-group" key={group.label}>
               <p className="nav-label">{group.label}</p>
               {group.items.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = pathname === item.href || (item.href === "/import" && pathname.startsWith("/sources/"));
                 return (
                   <Link
                     aria-current={isActive ? "page" : undefined}
@@ -110,8 +110,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <p className="sidebar-note">
-          D2 · 原文入库
-          <span>PDF、Markdown 与纯文本可真实导入</span>
+          D3 · 来源解析
+          <span>文件、网页与文本可导入并查看可信分段</span>
         </p>
       </aside>
 

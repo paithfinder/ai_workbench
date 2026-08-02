@@ -35,6 +35,15 @@ class ObjectStorage(Protocol):
 
     def iter_bytes(self, key: str) -> AsyncIterator[bytes]: ...
 
+    async def put_bytes(
+        self,
+        *,
+        key: str,
+        content: bytes,
+        media_type: str,
+        content_sha256: str,
+    ) -> StoredObject: ...
+
     async def promote(
         self,
         source_key: str,

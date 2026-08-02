@@ -28,6 +28,13 @@ describe("AppShell", () => {
     );
   });
 
+  it("keeps import navigation active on a source detail route", () => {
+    usePathname.mockReturnValue("/sources/6ee8885f-e0ca-4e04-bf02-47d63b6c5881");
+    render(<AppShell><h1>来源详情</h1></AppShell>);
+
+    expect(screen.getByRole("link", { name: "导入知识" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("opens and closes the responsive navigation", async () => {
     render(<AppShell><h1>页面内容</h1></AppShell>);
     const toggle = screen.getByRole("button", { name: "打开导航" });

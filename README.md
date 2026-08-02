@@ -1,30 +1,20 @@
 # 自序 · 个人知识工作台
 
-D1 建立两周 MVP 的可运行基础；D2 在此基础上开放真实来源导入，优先服务个人知识闭环，同时为后续解析、检索、评测与可信引用保留清晰边界。
+D1 建立两周 MVP 的可运行基础，D2 打通不可变来源导入，D3 在此基础上加入可重试的真实文档解析、版本化解析产物与可信引用定位。当前优先服务个人知识闭环；D4 的 AI 摘要与知识候选抽取尚未实现。
 
-## D1 范围
+## 当前 D1–D3 能力
 
-- Next.js 应用壳层和 FastAPI 基础服务，固定本地地址为 Web `http://localhost:3000`、API `http://localhost:8000`。
-- 单个预置个人知识空间；所有数据模型与后续接口仍显式携带 `space_id`。
-- PostgreSQL/pgvector、Redis 与 MinIO 本地基础设施，以及 Alembic 初始迁移。
-- AI Gateway 边界和无需密钥的 Fake Provider 基础。
-- OpenAPI 到前端类型的单向契约生成链路。
-- 20 条 `status=draft` 的中文 RAG 评测种子、JSON Schema 和本地校验器。
-- Playwright Web/API 可达性 smoke 测试与 CI 基线。
+- Next.js 应用与 FastAPI 服务固定为 Web `http://localhost:3000`、API `http://localhost:8000`；使用单个预置个人知识空间，数据模型与接口仍显式携带 `space_id`。
+- PostgreSQL/pgvector 保存业务事实，Redis 作为 Celery broker/短期基础设施，MinIO 保存不可变来源原件与解析产物；Alembic 管理迁移。
+- 文件导入支持 PDF、Markdown 和纯文本，浏览器校验扩展名、MIME、非空及 25 MiB 上限，并通过预签名 multipart `POST` 直传 MinIO。
+- 来源创建、上传预留、完成、重试和重解析使用幂等键；Job、JobAttempt 与 Transactional Outbox 协调至少一次执行，不依赖 Celery Result Backend 保存业务状态。
+- D3 将入库后的来源交给独立 `source-parse` 队列。Docling 运行时按锁定版本解析 PDF/Markdown/HTML，受源文件大小、页数、OCR、租约、心跳和总超时配置约束。
+- 解析产物按 source version 和 parse revision 写入 MinIO，并在 PostgreSQL 保存 canonical sections。section 保留稳定 ordinal、heading path、页码、段落索引、可用时的 bbox、精确 UTF-8 quote hash 及冻结到 source/version/artifact revision 的 locator。
+- 来源详情、分页 section 查询和幂等 reparse API 暴露真实解析状态；旧 revision 不覆盖当前可信引用所需的版本信息。
+- AI Gateway 边界仍使用无需凭据的 Fake Provider；OpenAPI 到前端类型保持单向生成。
+- 合成 parser fixture 覆盖 UTF-8 中文/Unicode、静态 HTML、单页/多页 PDF、表格、纯图片、空文件和畸形 PDF，并冻结来源哈希与期望 quote hash。
 
-架构决策见 [`docs/adr/`](docs/adr/)。
-
-## D2 范围
-
-- `/import` 使用 bootstrap 返回的默认知识空间 ID，不在前端写死空间。
-- 仅支持 PDF（`.pdf` / `application/pdf`）、Markdown（`.md` / `text/markdown`）和纯文本（`.txt` / `text/plain`），浏览器先校验扩展名、MIME、非空和 25 MiB 上限。
-- 浏览器使用 Web Crypto 计算 SHA-256，创建来源、申请上传预留，并按服务端返回的 URL、headers 与 policy fields 通过 XHR multipart `POST` 到 MinIO，同时展示上传进度；文件字段始终最后追加，浏览器自行生成 multipart boundary。单次导入保留 source/version 和稳定的 create/reserve/complete 幂等键；对象上传或 complete 失败后可继续同一会话，不会重复创建 source。
-- 哈希、API 与 XHR 使用同一个取消信号；上传有不晚于 reservation expiry 的超时和显式取消。create、reserve、complete 和 retry 使用各自稳定的 `Idempotency-Key`；complete 后轮询真实任务状态，retry 结果不确定时会查询 job 对账。
-- 最近来源记录严格来自当前 `list_sources` 的 source 字段。该响应不含 latest version / job，因此持久列表不会推断或伪造上传/任务状态；刚完成的当前上传会在本页独立保留 source、version 与已知 job 并继续轮询。
-- 成功态只表示“原件已保存，等待 D3 解析”，不会生成或展示虚假的解析结果。
-- Compose 为本地 Web 来源配置 MinIO bucket CORS，以支持浏览器直传。
-
-D2 不包含正文解析、页数/段落抽取、摘要、知识点或向量化；这些仍属于 D3 及后续范围。
+架构决策见 [`docs/adr/`](docs/adr/)，D3 worker/runtime 决策见 [`ADR-0005`](docs/adr/0005-d3-parse-worker-and-runtime.md)。
 
 ## 一键 Compose 启动
 
@@ -35,7 +25,11 @@ cp .env.example .env
 docker compose -f infra/compose/docker-compose.yml up --build
 ```
 
-Compose 会启动 PostgreSQL、Redis、MinIO，执行迁移，然后启动 API 与 Web。健康检查：
+Compose 会启动 PostgreSQL、Redis、MinIO，执行迁移，然后启动 API、Web、outbox relay、保留的 `source-ingest` worker，以及独立的 `source-parse` worker。parse worker 固定 `concurrency=1`，显式连接数据库、Redis 与 MinIO，以免重型解析阻塞入库任务。
+
+Docling 依赖由 `pyproject.toml` 和 `uv.lock` 锁定。镜像构建与容器启动不会主动初始化或下载模型；重型 converter/model 初始化仅在 parse worker 实际解析时发生。首次 OCR 解析可能需要取得上游模型，生产环境应预置受控模型缓存并配置 `DOCLING_ARTIFACTS_PATH`。
+
+健康检查：
 
 ```bash
 curl http://localhost:8000/health/live
@@ -48,48 +42,78 @@ curl http://localhost:3000/api/health
 docker compose -f infra/compose/docker-compose.yml down
 ```
 
-如需同时删除本地数据卷，追加 `--volumes`。Docker 本机不可用时，可执行下述非容器检查；完整 Compose 与 smoke 流程由 CI 覆盖。
+如需同时删除本地数据卷，追加 `--volumes`。
+
+## D3 运行配置
+
+`.env.example` 列出全部当前 Settings 环境变量。重点限制如下：
+
+| 配置 | 默认值 | 用途 |
+| --- | ---: | --- |
+| `MAX_UPLOAD_SIZE_BYTES` | `26214400` | 浏览器文件来源上限 |
+| `MAX_PASTED_TEXT_SIZE_BYTES` | `1048576` | 粘贴文本 UTF-8 字节上限 |
+| `WEB_FETCH_CONNECT_TIMEOUT_SECONDS` | `5.0` | 安全网页抓取连接超时 |
+| `WEB_FETCH_TOTAL_TIMEOUT_SECONDS` | `15.0` | 单次网页抓取总超时 |
+| `WEB_FETCH_MAX_BODY_BYTES` | `5242880` | 网页快照响应体上限 |
+| `WEB_FETCH_MAX_REDIRECTS` | `5` | 安全重定向上限 |
+| `PARSE_ATTEMPT_LEASE_SECONDS` | `1800` | PostgreSQL parse attempt 租约 |
+| `PARSE_HEARTBEAT_SECONDS` | `30` | 长解析租约续期周期 |
+| `PARSE_TIMEOUT_SECONDS` | `1800` | 单次 parser 调用总超时 |
+| `PARSE_MAX_PAGES` | `200` | 单文档解析页数上限 |
+| `PARSE_MAX_SOURCE_BYTES` | `26214400` | parse worker 下载/解析字节上限 |
+| `PARSE_ENABLE_OCR` | `true` | 是否允许 PDF OCR |
+| `PARSE_OCR_LANGUAGES` | `["en","zh"]` | JSON 数组形式的 OCR 语言 |
+| `PARSE_ARTIFACT_PREFIX` | `artifacts` | MinIO 解析产物前缀 |
+| `PARSER_NAME` / `PARSER_VERSION` | `docling` / `2.117.0` | 解析 artifact 的预定 parser 元数据 |
+
+租约应覆盖正常解析窗口；心跳周期必须显著短于租约。parse timeout 和资源限制用于停止单次尝试，数据库租约与 Celery 重试用于恢复，而不是以提高 worker 并发绕过限制。
 
 ## 本地开发
 
 要求 Python 3.12、uv、Node.js 20 和 pnpm 10。
 
 ```bash
-uv sync --frozen --all-packages
+uv sync --frozen --all-packages --all-groups
 pnpm install --frozen-lockfile
 
 # API（默认 http://localhost:8000）
 uv run --package knowledge-workbench-api uvicorn knowledge_workbench.main:app \
   --app-dir apps/api/src --reload --host 0.0.0.0 --port 8000
 
+# source-ingest worker
+uv run --package knowledge-workbench-api celery \
+  -A knowledge_workbench.worker.celery_app:celery_app worker \
+  --loglevel=INFO --queues=source-ingest
+
+# D3 source-parse worker（独立终端，固定并发 1）
+uv run --package knowledge-workbench-api celery \
+  -A knowledge_workbench.worker.celery_app:celery_app worker \
+  --loglevel=INFO --queues=source-parse --concurrency=1
+
+# Outbox relay（独立终端）
+uv run --package knowledge-workbench-api python \
+  -m knowledge_workbench.worker.outbox_relay
+
 # Web（默认 http://localhost:3000）
 pnpm dev:web
 ```
 
-本地直接运行 API 时，`.env` 中的依赖地址需指向 `localhost`；Compose 内则使用服务名 `postgres`、`redis`、`minio`。
+本地直接运行进程时，`.env` 中 PostgreSQL、Redis、MinIO 地址需指向 `localhost`；Compose 内使用 `postgres`、`redis`、`minio` 服务名。
 
 ## 数据库迁移
 
 ```bash
-# 升级到最新版本
 uv run --package knowledge-workbench-api alembic -c apps/api/alembic.ini upgrade head
-
-# 检查当前版本
 uv run --package knowledge-workbench-api alembic -c apps/api/alembic.ini current
-
-# 回退一版
 uv run --package knowledge-workbench-api alembic -c apps/api/alembic.ini downgrade -1
 ```
 
 ## API 契约
 
-FastAPI 是 OpenAPI 的定义来源，生成方向固定为 FastAPI → OpenAPI → TypeScript。根命令会先从应用工厂导出规范，再更新生成类型：
+FastAPI 是 OpenAPI 定义来源，生成方向固定为 FastAPI → OpenAPI → TypeScript：
 
 ```bash
-# 从 FastAPI 导出 OpenAPI 并生成 TypeScript 类型
 pnpm contract:generate
-
-# 重新生成并检查是否存在未提交的契约漂移
 pnpm contract:check
 ```
 
@@ -101,7 +125,13 @@ pnpm contract:check
 # RAG JSON + Schema（无需第三方 Python 包）
 python evals/validate_seeds.py
 
-# 后端单元测试、静态检查与迁移回放
+# D3 fixture、确定性 parser contract 与真实 Docling fixture 回归
+uv run --package knowledge-workbench-api pytest \
+  apps/api/tests/unit/test_d3_fixture_manifest.py \
+  apps/api/tests/unit/test_source_parsing.py \
+  apps/api/tests/integration/test_docling_parser.py
+
+# 完整后端单元测试、静态检查与迁移回放
 uv run --package knowledge-workbench-api ruff check apps/api
 uv run --package knowledge-workbench-api mypy apps/api/src
 uv run --package knowledge-workbench-api pytest apps/api/tests/unit
@@ -113,21 +143,18 @@ pnpm typecheck
 pnpm test
 pnpm build
 
-# Web/API 已运行后执行 smoke 与真实 PDF/MD/TXT 导入 E2E
+# Compose 服务已运行后执行 Web/API smoke 与导入 E2E
 pnpm exec playwright test --config tests/e2e/playwright.config.ts
-
-# 只执行 D2 来源导入 E2E
-pnpm exec playwright test --config tests/e2e/playwright.config.ts tests/e2e/source-import.spec.ts
 ```
 
-CI 会使用 PostgreSQL 服务执行迁移与后端检查，并通过 Compose 启动预期服务后执行 Playwright smoke。
+CI 会显式执行 D3 fixture、确定性 parser contract 与真实 Docling fixture 回归，再执行完整后端单元测试、迁移与 OpenAPI 漂移检查。真实 Docling 回归覆盖 Markdown quote hash、PDF 页码/bbox provenance 和空文件失败路径；它不启用 OCR，因此不声称验证 OCR 模型转换。Compose Playwright job 负责构建并启动容器服务。
 
 ## 尚未实现
 
-- 文件解析、切分、向量化，以及解析阶段的可重试异步处理流水线。
-- 知识候选的人工审核、知识树、全文/向量混合检索和带引用问答。
+- D4 AI 摘要、知识点/知识候选抽取及人工审核；D3 只做确定性解析与可信来源定位。
+- 向量化、知识树、全文/向量混合检索和带引用问答。
 - 间隔复习、活动中心的完整业务能力与 RAG 指标评分流水线。
 - 多空间创建/切换、团队协作、用户身份、权限与配额管理。
-- 真实 AI Provider 调用、生产密钥接入、成本/限流策略；D1 仅使用 Fake Provider。
+- 真实 AI Provider 调用、生产密钥接入、成本/限流策略；当前仅使用 Fake Provider。
 - 类 Claude Code 的受控改码及 Git/Shell 执行；本期仅保留只读代码理解与可信引用方向。
-- 生产部署、高可用、备份恢复与完整可观测性。
+- 生产部署、高可用、备份恢复、模型制品供应与完整可观测性。

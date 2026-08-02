@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 from collections.abc import AsyncIterator, Mapping
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit, urlunsplit
@@ -91,6 +92,57 @@ class MinioObjectStorage(ObjectStorage):
         finally:
             response.close()
             response.release_conn()
+
+    async def put_bytes(
+        self,
+        *,
+        key: str,
+        content: bytes,
+        media_type: str,
+        content_sha256: str,
+    ) -> StoredObject:
+        try:
+            existing = await asyncio.to_thread(
+                self._internal.stat_object, self._bucket, key
+            )
+        except S3Error as exc:
+            if exc.code not in {"NoSuchKey", "NoSuchObject", "NoSuchBucket"}:
+                raise _storage_error() from exc
+        else:
+            existing_sha256 = _content_sha256(existing.metadata)
+            if (
+                existing.size != len(content)
+                or existing_sha256 != content_sha256
+                or existing.etag is None
+            ):
+                raise AppError(
+                    "immutable_object_conflict",
+                    "The immutable object key already contains different content.",
+                    status_code=409,
+                )
+            return StoredObject(
+                key=key,
+                size=existing.size,
+                etag=existing.etag,
+                media_type=(existing.content_type or "").split(";", 1)[0].strip().lower(),
+                content_sha256=existing_sha256,
+            )
+        try:
+            await asyncio.to_thread(
+                self._internal.put_object,
+                self._bucket,
+                key,
+                io.BytesIO(content),
+                len(content),
+                content_type=media_type,
+                metadata={"Content-Sha256": content_sha256},
+            )
+        except S3Error as exc:
+            raise _storage_error() from exc
+        stored = await self.stat(key)
+        if stored.size != len(content) or stored.content_sha256 != content_sha256:
+            raise _storage_error()
+        return stored
 
     async def promote(
         self,

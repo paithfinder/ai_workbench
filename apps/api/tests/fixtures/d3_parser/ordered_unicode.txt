@@ -1,0 +1,5 @@
+1. Capture the source exactly.
+
+2. Preserve ordered paragraphs and café text.
+
+3. Keep Unicode symbols: Ω, →, and 中文.

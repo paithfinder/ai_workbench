@@ -37,6 +37,15 @@ def test_d2_ingestion_defaults_are_bounded() -> None:
     assert settings.celery_broker_url.endswith("/1")
 
 
+def test_d3_non_file_ingestion_defaults_are_bounded() -> None:
+    settings = Settings()
+    assert settings.max_pasted_text_size_bytes == 1024 * 1024
+    assert settings.web_fetch_connect_timeout_seconds == 5.0
+    assert settings.web_fetch_total_timeout_seconds == 15.0
+    assert settings.web_fetch_max_body_bytes == 5 * 1024 * 1024
+    assert settings.web_fetch_max_redirects == 5
+
+
 def test_d1_ai_defaults_do_not_require_credentials() -> None:
     settings = Settings()
     assert settings.ai_provider == "fake"

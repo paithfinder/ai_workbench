@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_workbench.application.ports.object_storage import ObjectStorage
 from knowledge_workbench.db.models import OutboxEvent
-from knowledge_workbench.worker.source_ingest import (
+from knowledge_workbench.worker.job_runner import (
     recover_expired_leases,
     recover_orphaned_queued_jobs,
 )
@@ -18,6 +18,8 @@ from knowledge_workbench.worker.source_ingest import (
 
 class TaskPublisher(Protocol):
     def publish_source_ingest(self, payload: Mapping[str, object]) -> None: ...
+
+    def publish_source_parse(self, payload: Mapping[str, object]) -> None: ...
 
     async def cleanup_staging(self, storage_key: str) -> None: ...
 
@@ -33,6 +35,15 @@ class CeleryTaskPublisher:
             "knowledge_workbench.source_ingest",
             kwargs=dict(payload),
             queue="source-ingest",
+        )
+
+    def publish_source_parse(self, payload: Mapping[str, object]) -> None:
+        from knowledge_workbench.worker.celery_app import celery_app
+
+        celery_app.send_task(
+            "knowledge_workbench.source_parse",
+            kwargs=dict(payload),
+            queue="source-parse",
         )
 
     async def cleanup_staging(self, storage_key: str) -> None:
@@ -61,6 +72,8 @@ async def relay_batch(
         try:
             if event.event_type == "job.source_ingest.requested":
                 publisher.publish_source_ingest(event.payload)
+            elif event.event_type == "job.source_parse.requested":
+                publisher.publish_source_parse(event.payload)
             elif event.event_type == "storage.staging_cleanup.requested":
                 storage_key = event.payload.get("storage_key")
                 if not isinstance(storage_key, str):

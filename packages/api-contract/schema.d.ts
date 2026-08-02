@@ -90,6 +90,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/knowledge-spaces/{space_id}/sources/pasted-text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Pasted Text Source */
+        post: operations["create_pasted_text_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/sources/web": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Web Source */
+        post: operations["create_web_source"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge-spaces/{space_id}/sources/{source_id}": {
         parameters: {
             query?: never;
@@ -99,6 +133,23 @@ export interface paths {
         };
         /** Get Source */
         get: operations["get_source"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/sources/{source_id}/details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Source Details */
+        get: operations["get_source_details"];
         put?: never;
         post?: never;
         delete?: never;
@@ -152,6 +203,40 @@ export interface paths {
         put?: never;
         /** Complete Upload */
         post: operations["complete_source_upload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/sources/{source_id}/versions/{version_id}/reparse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reparse */
+        post: operations["reparse_source_version"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/sources/{source_id}/versions/{version_id}/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sections */
+        get: operations["list_source_sections"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -301,6 +386,11 @@ export interface components {
         ErrorEnvelope: {
             error: components["schemas"]["ErrorBody"];
         };
+        /**
+         * JobKind
+         * @enum {string}
+         */
+        JobKind: "source_ingest" | "source_parse" | "source_extract" | "source_index";
         /** JobReferenceResponse */
         JobReferenceResponse: {
             /**
@@ -331,8 +421,7 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Kind */
-            kind: string;
+            kind: components["schemas"]["JobKind"];
             /** Progress */
             progress: number;
             /** Retryable */
@@ -378,6 +467,51 @@ export interface components {
             /** Version */
             version: string;
         };
+        /** NonFileSourceResponse */
+        NonFileSourceResponse: {
+            job: components["schemas"]["JobReferenceResponse"];
+            source: components["schemas"]["SourceResponse"];
+            version: components["schemas"]["SourceVersionResponse"];
+        };
+        /** ParseArtifactResponse */
+        ParseArtifactResponse: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Error Code */
+            error_code: string | null;
+            /** Error Message */
+            error_message: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Page Count */
+            page_count: number | null;
+            /** Parser Config */
+            parser_config: {
+                [key: string]: unknown;
+            };
+            /** Parser Name */
+            parser_name: string;
+            /** Parser Version */
+            parser_version: string;
+            /** Revision */
+            revision: number;
+            /** Started At */
+            started_at: string | null;
+            /** Status */
+            status: string;
+            /** Warnings */
+            warnings: unknown[];
+        };
+        /** PastedTextRequest */
+        PastedTextRequest: {
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+        };
         /** ReadinessResponse */
         ReadinessResponse: {
             dependencies: components["schemas"]["DependencyStatus"];
@@ -386,6 +520,11 @@ export interface components {
              * @enum {string}
              */
             status: "ready" | "not_ready";
+        };
+        /** ReparseResponse */
+        ReparseResponse: {
+            artifact: components["schemas"]["ParseArtifactResponse"];
+            job: components["schemas"]["JobResponse"];
         };
         /** ReserveUploadRequest */
         ReserveUploadRequest: {
@@ -397,6 +536,69 @@ export interface components {
             original_filename: string;
             /** Size Bytes */
             size_bytes: number;
+        };
+        /** SectionResponse */
+        SectionResponse: {
+            /**
+             * Artifact Id
+             * Format: uuid
+             */
+            artifact_id: string;
+            /** Artifact Revision */
+            artifact_revision: number;
+            /** Bbox */
+            bbox: {
+                [key: string]: unknown;
+            } | null;
+            /** Block Id */
+            block_id: string;
+            /** Block Type */
+            block_type: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Heading Path */
+            heading_path: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Locator */
+            locator: {
+                [key: string]: unknown;
+            };
+            /** Ordinal */
+            ordinal: number;
+            /** Page Number */
+            page_number: number | null;
+            /** Paragraph Index */
+            paragraph_index: number | null;
+            /** Parent Block Id */
+            parent_block_id: string | null;
+            /** Provenance */
+            provenance: {
+                [key: string]: unknown;
+            };
+            /** Quote Hash */
+            quote_hash: string;
+            /** Text */
+            text: string;
+            /** Title */
+            title: string | null;
+        };
+        /** SectionsResponse */
+        SectionsResponse: {
+            artifact: components["schemas"]["ParseArtifactResponse"];
+            /** Items */
+            items: components["schemas"]["SectionResponse"][];
+            /** Next Cursor */
+            next_cursor: string | null;
+        };
+        /** SourceDetailsResponse */
+        SourceDetailsResponse: {
+            source: components["schemas"]["SourceResponse"];
+            /** Versions */
+            versions: components["schemas"]["SourceVersionDetailResponse"][];
         };
         /** SourceListResponse */
         SourceListResponse: {
@@ -432,6 +634,14 @@ export interface components {
              */
             updated_at: string;
         };
+        /** SourceVersionDetailResponse */
+        SourceVersionDetailResponse: {
+            current_parse_artifact: components["schemas"]["ParseArtifactResponse"] | null;
+            parse_job: components["schemas"]["JobResponse"] | null;
+            /** Section Count */
+            section_count: number;
+            version: components["schemas"]["SourceVersionResponse"];
+        };
         /** SourceVersionListResponse */
         SourceVersionListResponse: {
             /** Items */
@@ -439,6 +649,12 @@ export interface components {
         };
         /** SourceVersionResponse */
         SourceVersionResponse: {
+            /** Acquisition Metadata */
+            acquisition_metadata: {
+                [key: string]: unknown;
+            };
+            /** Acquisition Type */
+            acquisition_type: string;
             /** Completed At */
             completed_at: string | null;
             /** Content Sha256 */
@@ -448,31 +664,32 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Current Parse Artifact Id */
+            current_parse_artifact_id: string | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
             /** Media Type */
-            media_type: string;
+            media_type: string | null;
             /** Original Filename */
-            original_filename: string;
+            original_filename: string | null;
             /** Parse Status */
             parse_status: string;
             /** Processing Status */
             processing_status: string;
             /** Size Bytes */
-            size_bytes: number;
+            size_bytes: number | null;
             /**
              * Source Id
              * Format: uuid
              */
             source_id: string;
-            /**
-             * Upload Expires At
-             * Format: date-time
-             */
-            upload_expires_at: string;
+            /** Source Uri */
+            source_uri: string | null;
+            /** Upload Expires At */
+            upload_expires_at: string | null;
             /** Version Number */
             version_number: number;
         };
@@ -494,6 +711,13 @@ export interface components {
             /** Upload Url */
             upload_url: string;
             version: components["schemas"]["SourceVersionResponse"];
+        };
+        /** WebSourceRequest */
+        WebSourceRequest: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
         };
     };
     responses: never;
@@ -759,6 +983,152 @@ export interface operations {
             };
         };
     };
+    create_pasted_text_source: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PastedTextRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NonFileSourceResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_web_source: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebSourceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NonFileSourceResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
     get_source: {
         parameters: {
             query?: never;
@@ -791,6 +1161,74 @@ export interface operations {
             };
             /** @description Unprocessable Content */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_source_details: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceDetailsResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -937,6 +1375,149 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CompleteUploadResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    reparse_source_version: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+                source_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReparseResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    list_source_sections: {
+        parameters: {
+            query?: {
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                space_id: string;
+                source_id: string;
+                version_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectionsResponse"];
                 };
             };
             /** @description Not Found */

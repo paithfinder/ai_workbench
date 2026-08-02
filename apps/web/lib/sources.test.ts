@@ -4,7 +4,12 @@ import {
   createSource,
   getJob,
   getSource,
+  getSourceDetails,
+  importPastedTextSource,
+  importWebSource,
+  listSourceSections,
   listSources,
+  reparseSourceVersion,
   retryJob,
   reserveUpload,
 } from "./sources";
@@ -29,12 +34,16 @@ const version = {
   id: ids.version,
   source_id: ids.source,
   version_number: 1,
+  acquisition_type: "upload",
+  source_uri: null,
+  acquisition_metadata: {},
   original_filename: "真实笔记.md",
   media_type: "text/markdown",
   size_bytes: 8,
   content_sha256: null,
   processing_status: "pending",
   parse_status: "not_started",
+  current_parse_artifact_id: null,
   upload_expires_at: "2026-07-31T12:15:00Z",
   completed_at: null,
   created_at: now,
@@ -155,6 +164,88 @@ describe("source API", () => {
 
     await expect(getSource(ids.space, ids.source)).resolves.toEqual(source);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(`/sources/${ids.source}`);
+  });
+
+  it("imports web and pasted text with exact endpoint bodies and stable operation keys", async () => {
+    const imported = {
+      source,
+      version: { ...version, acquisition_type: "web_fetch", source_uri: "https://example.com/note", original_filename: null, upload_expires_at: null },
+      job: { id: ids.job, status: "queued" },
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json(imported, 202))
+      .mockResolvedValueOnce(json({
+        ...imported,
+        source: { ...source, kind: "pasted_text" },
+        version: { ...imported.version, acquisition_type: "pasted_text", source_uri: null },
+      }, 202));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await importWebSource(ids.space, "网页笔记", "https://example.com/note", "web-key");
+    await importPastedTextSource(ids.space, "粘贴笔记", "真实正文", "text-key");
+
+    const [webUrl, webInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [textUrl, textInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(webUrl).toContain("/sources/web");
+    expect(JSON.parse(String(webInit.body))).toEqual({ title: "网页笔记", url: "https://example.com/note" });
+    expect(new Headers(webInit.headers).get("Idempotency-Key")).toBe("web-key");
+    expect(textUrl).toContain("/sources/pasted-text");
+    expect(JSON.parse(String(textInit.body))).toEqual({ title: "粘贴笔记", text: "真实正文" });
+    expect(new Headers(textInit.headers).get("Idempotency-Key")).toBe("text-key");
+  });
+
+  it("gets details, paginated sections, and reparses without inventing a body", async () => {
+    const artifact = {
+      id: "a9a6e120-59b4-4ebc-a9b3-b4b81c7ee206",
+      revision: 2,
+      status: "ready",
+      parser_name: "docling",
+      parser_version: "1.0",
+      parser_config: {},
+      page_count: 1,
+      warnings: [],
+      error_code: null,
+      error_message: null,
+      started_at: now,
+      completed_at: now,
+    };
+    const parseJob = { ...job, kind: "source_parse", status: "succeeded", progress: 100 };
+    const details = { source, versions: [{ version: { ...version, parse_status: "ready", current_parse_artifact_id: artifact.id }, parse_job: parseJob, current_parse_artifact: artifact, section_count: 1 }] };
+    const section = {
+      id: "c90d99d3-4080-4918-aae6-5d7dc59289c9",
+      artifact_id: artifact.id,
+      artifact_revision: 2,
+      ordinal: 0,
+      block_id: "paragraph-1",
+      parent_block_id: null,
+      block_type: "paragraph",
+      title: null,
+      text: "可信正文",
+      heading_path: ["第一章"],
+      page_number: 1,
+      paragraph_index: 0,
+      bbox: null,
+      locator: { locatorType: "page_heading_paragraph" },
+      quote_hash: "b".repeat(64),
+      content_hash: "c".repeat(64),
+      provenance: {},
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json(details))
+      .mockResolvedValueOnce(json({ items: [section], next_cursor: "next/cursor", artifact }))
+      .mockResolvedValueOnce(json({ job: parseJob, artifact }, 202));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getSourceDetails(ids.space, ids.source)).resolves.toEqual(details);
+    await expect(listSourceSections(ids.space, ids.source, ids.version, { limit: 10, cursor: "cursor/一" })).resolves.toEqual({ items: [section], next_cursor: "next/cursor", artifact });
+    await expect(reparseSourceVersion(ids.space, ids.source, ids.version, "reparse-key")).resolves.toEqual({ job: parseJob, artifact });
+
+    const [sectionsUrl] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(sectionsUrl).toContain("limit=10&cursor=cursor%2F%E4%B8%80");
+    const [reparseUrl, reparseInit] = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect(reparseUrl).toContain(`/versions/${ids.version}/reparse`);
+    expect(reparseInit.body).toBeUndefined();
+    expect(new Headers(reparseInit.headers).get("Idempotency-Key")).toBe("reparse-key");
   });
 
   it("passes AbortSignal through source requests", async () => {

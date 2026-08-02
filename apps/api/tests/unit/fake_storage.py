@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import AsyncIterator
 from datetime import timedelta
 
@@ -47,6 +48,24 @@ class FakeObjectStorage:
         content = self.objects[key][0]
         for offset in range(0, len(content), 7):
             yield content[offset : offset + 7]
+
+    async def put_bytes(
+        self,
+        *,
+        key: str,
+        content: bytes,
+        media_type: str,
+        content_sha256: str,
+    ) -> StoredObject:
+        if hashlib.sha256(content).hexdigest() != content_sha256:
+            raise AppError("checksum_mismatch", "Checksum mismatch.", status_code=422)
+        if key in self.objects and self.content_sha256.get(key) != content_sha256:
+            raise AppError(
+                "immutable_object_conflict", "Immutable content differs.", status_code=409
+            )
+        self.objects.setdefault(key, (content, media_type, f"etag-{len(self.objects) + 1}"))
+        self.content_sha256[key] = content_sha256
+        return await self.stat(key)
 
     async def promote(
         self,

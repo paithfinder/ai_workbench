@@ -1,0 +1,64 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 343 >>
+stream
+BT
+/F1 16 Tf
+72 735 Td
+(Simple Inventory Table) Tj
+ET
+0.8 w
+72 680 m 432 680 l S
+72 650 m 432 650 l S
+72 620 m 432 620 l S
+72 590 m 432 590 l S
+72 590 m 72 680 l S
+252 590 m 252 680 l S
+432 590 m 432 680 l S
+BT
+/F1 11 Tf
+82 660 Td
+(Item) Tj
+180 0 Td
+(Count) Tj
+-180 -30 Td
+(Apples) Tj
+180 0 Td
+(12) Tj
+-180 -30 Td
+(Pears) Tj
+180 0 Td
+(7) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Title (D3 Simple Inventory Table) /Producer (AI Workbench deterministic fixture generator) >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000641 00000 n 
+0000000711 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R /Info 6 0 R >>
+startxref
+824
+%%EOF

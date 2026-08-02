@@ -8,11 +8,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from minio import Minio
 from redis.asyncio import Redis
 
-from knowledge_workbench.api import bootstrap, health, jobs, sources
+from knowledge_workbench.api import (
+    bootstrap,
+    health,
+    jobs,
+    non_file_sources,
+    source_parsing,
+    sources,
+)
 from knowledge_workbench.config import Settings, get_settings
 from knowledge_workbench.core.errors import install_error_handlers
 from knowledge_workbench.core.logging import configure_logging
-from knowledge_workbench.core.middleware import request_id_middleware
+from knowledge_workbench.core.middleware import (
+    pasted_text_body_limit_middleware,
+    request_id_middleware,
+)
 from knowledge_workbench.db.session import create_engine, create_session_factory
 from knowledge_workbench.infrastructure.ai.fake import FakeAIGateway
 from knowledge_workbench.infrastructure.storage.minio import MinioObjectStorage
@@ -31,7 +41,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title="Zixu Knowledge Workbench API",
         version=resolved_settings.app_version,
-        description="D2 source ingestion API for the personal knowledge management workbench.",
+        description=(
+            "D3 immutable source ingestion and parsing API for the personal knowledge workbench."
+        ),
         lifespan=lifespan,
     )
     app.state.settings = resolved_settings
@@ -57,6 +69,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         resolved_settings.s3_public_endpoint,
     )
     app.state.ai_gateway = FakeAIGateway()
+    app.middleware("http")(
+        pasted_text_body_limit_middleware(
+            resolved_settings.max_pasted_text_size_bytes
+        )
+    )
     app.middleware("http")(request_id_middleware)
     app.add_middleware(
         CORSMiddleware,
@@ -70,6 +87,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(bootstrap.router)
     app.include_router(sources.router)
+    app.include_router(non_file_sources.router)
+    app.include_router(source_parsing.router)
     app.include_router(jobs.router)
     return app
 

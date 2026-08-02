@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from knowledge_workbench.api.dependencies import SessionDependency
 from knowledge_workbench.application.jobs import JobService
 from knowledge_workbench.core.errors import ErrorEnvelope
-from knowledge_workbench.db.models import Job
+from knowledge_workbench.db.models import Job, JobKind
 
 router = APIRouter(prefix="/api/v1/knowledge-spaces/{space_id}/jobs", tags=["jobs"])
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
@@ -24,7 +24,7 @@ class JobResponse(BaseModel):
     id: UUID
     space_id: UUID
     source_version_id: UUID | None
-    kind: str
+    kind: JobKind
     status: str
     progress: int
     attempt_count: int
@@ -42,7 +42,7 @@ def _job_response(job: Job) -> JobResponse:
         id=job.id,
         space_id=job.space_id,
         source_version_id=job.source_version_id,
-        kind=job.kind,
+        kind=JobKind(job.kind),
         status=job.status,
         progress=job.progress,
         attempt_count=job.attempt_count,
