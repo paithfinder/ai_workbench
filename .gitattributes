@@ -1,1 +1,4 @@
 *.pdf binary
+apps/api/tests/fixtures/d3_parser/*.md text eol=lf
+apps/api/tests/fixtures/d3_parser/*.txt text eol=lf
+apps/api/tests/fixtures/d3_parser/*.html text eol=lf

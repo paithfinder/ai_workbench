@@ -44,8 +44,12 @@ async def run_async_migrations() -> None:
                 compare_type=True,
             )
         )
-        async with connection.begin():
-            await connection.run_sync(lambda _: context.run_migrations())
+        await connection.run_sync(lambda _: context.run_migrations())
+        # SQLAlchemy AsyncConnection holds a single implicit transaction for the whole
+        # run_migrations() call (alembic uses savepoints per revision, not real commits).
+        # Without an explicit commit here the entire migration batch is silently rolled
+        # back when the connection closes — alembic exits 0 but no tables persist.
+        await connection.commit()
     await connectable.dispose()
 
 
