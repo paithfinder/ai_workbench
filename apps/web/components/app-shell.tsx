@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <strong>知识管理工作台</strong>
         </div>
         <div className="top-actions">
-          <span className="local-pill">LOCAL · D3</span>
+          <span className="local-pill">LOCAL · D6</span>
           <span className="avatar" aria-label="当前用户 MT">MT</span>
         </div>
       </header>
@@ -110,8 +110,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <p className="sidebar-note">
-          D3 · 来源解析
-          <span>文件、网页与文本可导入并查看可信分段</span>
+          D6 · 稳定知识目录
+          <span>浏览已确认内容、维护层级，并从引用回到原始分段</span>
         </p>
       </aside>
 

@@ -35,6 +35,15 @@ describe("AppShell", () => {
     expect(screen.getByRole("link", { name: "导入知识" })).toHaveAttribute("aria-current", "page");
   });
 
+  it("marks extraction review active and exposes D6 shell context", () => {
+    usePathname.mockReturnValue("/extraction");
+    render(<AppShell><h1>提炼审查页</h1></AppShell>);
+
+    expect(screen.getByRole("link", { name: "提炼审查" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("LOCAL · D6")).toBeInTheDocument();
+    expect(screen.getByText("D6 · 稳定知识目录")).toBeInTheDocument();
+  });
+
   it("opens and closes the responsive navigation", async () => {
     render(<AppShell><h1>页面内容</h1></AppShell>);
     const toggle = screen.getByRole("button", { name: "打开导航" });

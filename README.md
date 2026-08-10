@@ -1,8 +1,8 @@
 # 自序 · 个人知识工作台
 
-D1 建立两周 MVP 的可运行基础，D2 打通不可变来源导入，D3 在此基础上加入可重试的真实文档解析、版本化解析产物与可信引用定位。当前优先服务个人知识闭环；D4 的 AI 摘要与知识候选抽取尚未实现。
+D1 建立两周 MVP 的可运行基础，D2 打通不可变来源导入，D3 加入可重试的真实文档解析、版本化解析产物与可信引用定位，D4 实现结构化 AI 提炼与可追踪 Extraction Job，D5 交付候选编辑、人工决策与正式知识入库事务，D6 已加入 PostgreSQL 持久化知识树、Revision 编辑、词法搜索和不可漂移的来源深链。当前优先服务个人知识闭环；向量检索与问答仍属于后续阶段。
 
-## 当前 D1–D3 能力
+## 当前 D1–D6 能力
 
 - Next.js 应用与 FastAPI 服务固定为 Web `http://localhost:3000`、API `http://localhost:8000`；使用单个预置个人知识空间，数据模型与接口仍显式携带 `space_id`。
 - PostgreSQL/pgvector 保存业务事实，Redis 作为 Celery broker/短期基础设施，MinIO 保存不可变来源原件与解析产物；Alembic 管理迁移。
@@ -11,7 +11,13 @@ D1 建立两周 MVP 的可运行基础，D2 打通不可变来源导入，D3 在
 - D3 将入库后的来源交给独立 `source-parse` 队列。Docling 运行时按锁定版本解析 PDF/Markdown/HTML，受源文件大小、页数、OCR、租约、心跳和总超时配置约束。
 - 解析产物按 source version 和 parse revision 写入 MinIO，并在 PostgreSQL 保存 canonical sections。section 保留稳定 ordinal、heading path、页码、段落索引、可用时的 bbox、精确 UTF-8 quote hash 及冻结到 source/version/artifact revision 的 locator。
 - 来源详情、分页 section 查询和幂等 reparse API 暴露真实解析状态；旧 revision 不覆盖当前可信引用所需的版本信息。
-- AI Gateway 边界仍使用无需凭据的 Fake Provider；OpenAPI 到前端类型保持单向生成。
+- AI Gateway 默认使用无需凭据的确定性 Fake Provider；设置 `AI_PROVIDER=anthropic` 与服务端 `ANTHROPIC_API_KEY` 后，通过官方 Anthropic Python SDK 调用 Claude Opus 5。
+- D4 将 ready parse artifact 分批送入 `source-extract` worker，以严格 Pydantic Structured Output 生成标题、原子正文、标签、Evidence ID、置信度和待验证原因。Evidence 必须属于同一来源版本，否则整次提炼安全失败且不落候选。
+- Extraction Job 记录 Provider、Model、Prompt Version、Token、Latency 和 Request ID；来源详情显示进度与可重试失败。
+- D5 Candidate Queue 保持 ORIGINAL SOURCE 与 AI CANDIDATE 身份分离，支持编辑最终标题、正文、标签与目标位置，以及接受、待验证和拒绝。接受会在同一事务内创建正式知识节点、revision、冻结 Evidence、复习卡、审查记录、活动与 Outbox；待验证和拒绝不会创建正式知识。
+- D5 写接口要求 `Idempotency-Key` 与 `expected_version`，支持结果重放、冲突检测和不确定响应 reconciliation；接受来源 Evidence 前会重新校验版本、解析产物、locator 与 quote hash。
+- D6 以邻接表和 PostgreSQL `ltree` 持久化 `root/folder/document/point/source` 五类节点；支持创建目录/文档、追加 Revision、移动子树、软删除、乐观锁、幂等重放和写结果 reconciliation。追加 Revision 会保留历史并显式继承当前冻结 Evidence；编辑界面要求保存前确认修改后的正文仍由这些来源支持。
+- `/knowledge` 提供可折叠 WAI-ARIA Tree、服务端标题/正文/显示路径/关联来源标题搜索、详情维护和 Citation drawer；引用固定到精确 SourceVersion、ParseArtifact 与 Section，并可深链到历史原文高亮位置。
 - 合成 parser fixture 覆盖 UTF-8 中文/Unicode、静态 HTML、单页/多页 PDF、表格、纯图片、空文件和畸形 PDF，并冻结来源哈希与期望 quote hash。
 
 架构决策见 [`docs/adr/`](docs/adr/)，D3 worker/runtime 决策见 [`ADR-0005`](docs/adr/0005-d3-parse-worker-and-runtime.md)。
@@ -25,7 +31,7 @@ cp .env.example .env
 docker compose -f infra/compose/docker-compose.yml up --build
 ```
 
-Compose 会启动 PostgreSQL、Redis、MinIO，执行迁移，然后启动 API、Web、outbox relay、保留的 `source-ingest` worker，以及独立的 `source-parse` worker。parse worker 固定 `concurrency=1`，显式连接数据库、Redis 与 MinIO，以免重型解析阻塞入库任务。
+Compose 会启动 PostgreSQL、Redis、MinIO，执行迁移，然后启动 API、Web、outbox relay、保留的 `source-ingest` worker，以及独立的 `source-parse` 和 `source-extract` worker。parse/extract worker 固定 `concurrency=1`，显式连接数据库、Redis 与 MinIO，以免重型解析或模型调用阻塞入库任务。
 
 Docling 依赖由 `pyproject.toml` 和 `uv.lock` 锁定。镜像构建与容器启动不会主动初始化或下载模型；重型 converter/model 初始化仅在 parse worker 实际解析时发生。首次 OCR 解析可能需要取得上游模型，生产环境应预置受控模型缓存并配置 `DOCLING_ARTIFACTS_PATH`。
 
@@ -90,6 +96,11 @@ uv run --package knowledge-workbench-api celery \
   -A knowledge_workbench.worker.celery_app:celery_app worker \
   --loglevel=INFO --queues=source-parse --concurrency=1
 
+# D4 source-extract worker（独立终端，固定并发 1）
+uv run --package knowledge-workbench-api celery \
+  -A knowledge_workbench.worker.celery_app:celery_app worker \
+  --loglevel=INFO --queues=source-extract --concurrency=1
+
 # Outbox relay（独立终端）
 uv run --package knowledge-workbench-api python \
   -m knowledge_workbench.worker.outbox_relay
@@ -151,10 +162,9 @@ CI 会显式执行 D3 fixture、确定性 parser contract 与真实 Docling fixt
 
 ## 尚未实现
 
-- D4 AI 摘要、知识点/知识候选抽取及人工审核；D3 只做确定性解析与可信来源定位。
-- 向量化、知识树、全文/向量混合检索和带引用问答。
-- 间隔复习、活动中心的完整业务能力与 RAG 指标评分流水线。
+- Chunk、Embedding、pgvector/HNSW、全文/向量混合检索、检索调试和 Recall@5（D7 范围）。
+- 带引用问答、RRF/reranker、LangGraph/Agent，以及 D10 的 FSRS 调度字段与完整间隔复习。
 - 多空间创建/切换、团队协作、用户身份、权限与配额管理。
-- 真实 AI Provider 调用、生产密钥接入、成本/限流策略；当前仅使用 Fake Provider。
+- 生产 AI 密钥托管、预算/成本告警和更完整的限流策略；本地默认使用 Fake Provider，真实 Anthropic 调用需要显式服务端配置。
 - 类 Claude Code 的受控改码及 Git/Shell 执行；本期仅保留只读代码理解与可信引用方向。
 - 生产部署、高可用、备份恢复、模型制品供应与完整可观测性。

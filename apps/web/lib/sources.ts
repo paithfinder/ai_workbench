@@ -141,6 +141,7 @@ export type SourceSection = z.infer<typeof sectionSchema>;
 
 export const sectionsPageSchema = z.object({
   items: z.array(sectionSchema),
+  previous_cursor: z.string().min(1).nullable(),
   next_cursor: z.string().min(1).nullable(),
   artifact: parseArtifactSchema,
 });
@@ -307,10 +308,12 @@ export function listSourceSections(
   spaceId: string,
   sourceId: string,
   versionId: string,
-  { cursor, limit = 20, signal }: RequestOptions & { cursor?: string | null; limit?: number } = {},
+  { cursor, limit = 20, artifactId, sectionId, signal }: RequestOptions & { cursor?: string | null; limit?: number; artifactId?: string; sectionId?: string } = {},
 ) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set("cursor", cursor);
+  if (artifactId) params.set("artifact_id", artifactId);
+  if (sectionId) params.set("anchor_section_id", sectionId);
   return requestJson(
     `${sourcePath(spaceId, sourceId)}/versions/${encodeURIComponent(versionId)}/sections?${params}`,
     sectionsPageSchema,

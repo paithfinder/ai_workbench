@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, createIdempotencyKey } from "@/lib/api";
 import { getExtraction, scheduleExtraction } from "@/lib/extraction";
 import { fetchBootstrap } from "@/lib/bootstrap";
@@ -21,6 +21,12 @@ import { PageHeader } from "./page-states";
 const sourceKindLabels = { pdf: "PDF", markdown: "Markdown", text: "纯文本", web: "网页", pasted_text: "粘贴文本" } as const;
 const parseStatusLabels = { not_started: "尚未解析", queued: "等待解析", parsing: "正在解析", ready: "解析完成", failed: "解析失败" } as const;
 const acquisitionLabels = { upload: "文件上传", pasted_text: "粘贴文本", web_fetch: "网页快照" } as const;
+
+export type SourceDeepLink = {
+  versionId?: string;
+  artifactId?: string;
+  sectionId?: string;
+};
 
 function errorMessage(error: unknown) {
   if (error instanceof ApiError) return error.message;
@@ -49,23 +55,40 @@ function ArtifactSummary({ artifact }: { artifact: ParseArtifact }) {
   return <div className="artifact-summary"><span>解析器 <strong>{artifact.parser_name} {artifact.parser_version}</strong></span><span>Revision <strong>{artifact.revision}</strong></span><span>页数 <strong>{artifact.page_count ?? "未提供"}</strong></span>{artifact.warnings.length ? <span className="artifact-warning">警告 <strong>{artifact.warnings.length}</strong></span> : null}</div>;
 }
 
-function Sections({ spaceId, sourceId, version }: { spaceId: string; sourceId: string; version: SourceVersionDetail }) {
+function Sections({ spaceId, sourceId, version, deepLink }: { spaceId: string; sourceId: string; version: SourceVersionDetail; deepLink?: SourceDeepLink }) {
+  const targetSectionRef = useRef<HTMLLIElement>(null);
+  const artifactId = deepLink?.versionId === version.version.id ? deepLink.artifactId : undefined;
+  const sectionId = deepLink?.versionId === version.version.id ? deepLink.sectionId : undefined;
+  const enabled = Boolean(artifactId) || (
+    version.version.parse_status === "ready" && Boolean(version.current_parse_artifact)
+  );
   const sectionsQuery = useInfiniteQuery({
-    queryKey: ["source-sections", spaceId, sourceId, version.version.id, version.current_parse_artifact?.id],
-    queryFn: ({ pageParam, signal }) => listSourceSections(spaceId, sourceId, version.version.id, { cursor: pageParam, signal }),
+    queryKey: ["source-sections", spaceId, sourceId, version.version.id, artifactId ?? version.current_parse_artifact?.id, sectionId],
+    queryFn: ({ pageParam, signal }) => listSourceSections(spaceId, sourceId, version.version.id, { cursor: pageParam, artifactId, sectionId: pageParam ? undefined : sectionId, signal }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => page.next_cursor ?? undefined,
-    enabled: version.version.parse_status === "ready" && Boolean(version.current_parse_artifact),
+    getPreviousPageParam: (page) => page.previous_cursor ?? undefined,
+    enabled,
   });
-  const sections = sectionsQuery.data?.pages.flatMap((page) => page.items) ?? [];
-  if (version.version.parse_status !== "ready") return null;
-  if (!version.current_parse_artifact) return <p className="inline-error" role="alert">版本标记为解析完成，但接口没有返回当前解析产物。页面不会猜测分段内容。</p>;
+  const sections = useMemo(
+    () => sectionsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [sectionsQuery.data?.pages],
+  );
+  useEffect(() => {
+    if (!sectionId || !sections.some((section) => section.id === sectionId)) return;
+    const target = targetSectionRef.current;
+    if (!target) return;
+    target.scrollIntoView({ block: "center" });
+    target.focus({ preventScroll: true });
+  }, [sectionId, sections]);
+  if (!artifactId && version.version.parse_status !== "ready") return null;
+  if (!version.current_parse_artifact && !artifactId) return <p className="inline-error" role="alert">版本标记为解析完成，但接口没有返回当前解析产物。页面不会猜测分段内容。</p>;
   if (sectionsQuery.isPending) return <p aria-live="polite" className="muted-message">正在读取可引用分段…</p>;
   if (sectionsQuery.isError) return <div className="inline-error" role="alert">无法读取当前解析产物的分段。<button className="text-button" onClick={() => sectionsQuery.refetch()} type="button">重新加载</button></div>;
-  return <section aria-labelledby={`sections-${version.version.id}`} className="sections-panel"><div className="panel-heading"><div><p className="state-kicker">CANONICAL SECTIONS</p><h3 id={`sections-${version.version.id}`}>可引用分段</h3><p className="panel-caption">已读取 {sections.length} / {version.section_count} 个 section；每条引用冻结到当前 artifact revision。</p></div></div><ArtifactSummary artifact={sectionsQuery.data?.pages[0]?.artifact ?? version.current_parse_artifact} />{sections.length === 0 ? <div className="source-empty"><strong>解析产物没有分段</strong><p>这是服务端返回的真实空结果。</p></div> : <ol className="section-list">{sections.map((section) => <li className="section-card" key={section.id}><div className="section-heading"><span>{String(section.ordinal + 1).padStart(2, "0")}</span><div><small>{section.block_type}</small><h4>{section.title ?? section.heading_path.at(-1) ?? "正文"}</h4></div></div><p className="section-text">{section.text}</p><Locator section={section} /></li>)}</ol>}{sectionsQuery.hasNextPage ? <button className="button load-more" disabled={sectionsQuery.isFetchingNextPage} onClick={() => sectionsQuery.fetchNextPage()} type="button">{sectionsQuery.isFetchingNextPage ? "正在加载…" : "加载更多分段"}</button> : sections.length ? <p className="pagination-end">已显示当前解析产物的全部分段</p> : null}</section>;
+  return <section aria-labelledby={`sections-${version.version.id}`} className="sections-panel"><div className="panel-heading"><div><p className="state-kicker">CANONICAL SECTIONS</p><h3 id={`sections-${version.version.id}`}>可引用分段</h3><p className="panel-caption">已读取 {sections.length} / {version.section_count} 个 section；每条引用冻结到当前 artifact revision。</p></div></div><ArtifactSummary artifact={sectionsQuery.data?.pages[0]?.artifact ?? version.current_parse_artifact} />{sectionsQuery.hasPreviousPage ? <button className="button load-more" disabled={sectionsQuery.isFetchingPreviousPage} onClick={() => sectionsQuery.fetchPreviousPage()} type="button">{sectionsQuery.isFetchingPreviousPage ? "正在加载…" : "加载更早分段"}</button> : null}{sections.length === 0 ? <div className="source-empty"><strong>解析产物没有分段</strong><p>这是服务端返回的真实空结果。</p></div> : <ol className="section-list">{sections.map((section) => <li className={`section-card ${section.id === sectionId ? "section-card-target" : ""}`} id={`section-${section.id}`} key={section.id} ref={section.id === sectionId ? targetSectionRef : undefined} tabIndex={section.id === sectionId ? -1 : undefined}><div className="section-heading"><span>{String(section.ordinal + 1).padStart(2, "0")}</span><div><small>{section.block_type}</small><h4>{section.title ?? section.heading_path.at(-1) ?? "正文"}</h4></div></div><p className="section-text">{section.text}</p><Locator section={section} /></li>)}</ol>}{sectionsQuery.hasNextPage ? <button className="button load-more" disabled={sectionsQuery.isFetchingNextPage} onClick={() => sectionsQuery.fetchNextPage()} type="button">{sectionsQuery.isFetchingNextPage ? "正在加载…" : "加载更多分段"}</button> : sections.length && !sectionsQuery.hasPreviousPage ? <p className="pagination-end">已显示当前解析产物的全部分段</p> : null}</section>;
 }
 
-function VersionCard({ spaceId, sourceId, detail, latest, extractionEnabled }: { spaceId: string; sourceId: string; detail: SourceVersionDetail; latest: boolean; extractionEnabled: boolean }) {
+function VersionCard({ spaceId, sourceId, detail, latest, extractionEnabled, deepLink }: { spaceId: string; sourceId: string; detail: SourceVersionDetail; latest: boolean; extractionEnabled: boolean; deepLink?: SourceDeepLink }) {
   const queryClient = useQueryClient();
   const reparseKeyRef = useRef<string | null>(null);
   const extractionKeyRef = useRef<string | null>(null);
@@ -204,10 +227,10 @@ function VersionCard({ spaceId, sourceId, detail, latest, extractionEnabled }: {
     }
   }
 
-  return <article aria-labelledby={`version-${version.id}`} className={`version-card parse-${parseStatus}`}><div className="version-heading"><div><p className="state-kicker">VERSION {version.version_number}{latest ? " · LATEST" : ""}</p><h2 id={`version-${version.id}`}>{version.original_filename ?? version.source_uri ?? acquisitionLabels[version.acquisition_type]}</h2></div><span className={`parse-badge parse-${parseStatus}`}>{parseStatusLabels[parseStatus]}</span></div><dl className="version-facts"><div><dt>获取方式</dt><dd>{acquisitionLabels[version.acquisition_type]}</dd></div><div><dt>内容类型</dt><dd>{version.media_type ?? "未提供"}</dd></div><div><dt>原件大小</dt><dd>{version.size_bytes === null ? "未提供" : `${version.size_bytes.toLocaleString("zh-CN")} bytes`}</dd></div><div><dt>完成时间</dt><dd>{formatDate(version.completed_at)}</dd></div><div><dt>分段数量</dt><dd>{detail.section_count}</dd></div><div><dt>解析任务</dt><dd>{detail.parse_job ? `${detail.parse_job.status} · ${detail.parse_job.id}` : "暂无"}</dd></div></dl>{parseStatus === "queued" || parseStatus === "parsing" ? <div aria-live="polite" className="parse-state"><div><strong>{parseStatusLabels[parseStatus]}</strong><span>{detail.parse_job ? `任务进度 ${detail.parse_job.progress}%` : "正在等待服务端状态更新"}</span></div><progress aria-label="解析任务进度" max="100" value={detail.parse_job?.progress ?? 0}>{detail.parse_job?.progress ?? 0}%</progress></div> : null}{parseStatus === "failed" ? <div className="inline-error parse-error" role="alert"><strong>解析未完成</strong><p>{detail.current_parse_artifact?.error_message ?? detail.parse_job?.error_message ?? "服务端没有提供失败说明。"}</p></div> : null}{detail.current_parse_artifact ? <ArtifactSummary artifact={detail.current_parse_artifact} /> : null}<div className="version-actions"><button className="button" disabled={isReparsing || parseStatus === "queued" || parseStatus === "parsing"} onClick={reparse} type="button">{isReparsing ? "正在确认重新解析…" : "重新解析此版本"}</button>{extractionEnabled && parseStatus === "ready" && detail.section_count > 0 && !extractionRun ? <button className="button primary" disabled={isExtracting} onClick={extract} type="button">{isExtracting ? "正在创建提炼任务…" : "启动 AI 提炼"}</button> : null}<small>提炼任务只读取当前可信 parse revision；候选完成后进入 D4 队列，不会直接写入知识树。</small></div>{extractionRun ? <div className="job-state" role="status"><strong>{extractionRun.status === "succeeded" ? "AI 提炼已完成" : extractionRun.status === "failed" ? "AI 提炼失败" : "AI 提炼进行中"}</strong><p>Job {extractionRun.id} · {extractionRun.status} · {extractionRun.progress}%</p>{extractionRun.status === "queued" || extractionRun.status === "running" ? <progress aria-label="AI 提炼任务进度" max="100" value={extractionRun.progress}>{extractionRun.progress}%</progress> : null}{extractionRun.error_message ? <p>{extractionRun.error_message}</p> : null}{extractionRun.retryable ? <button className="button" disabled={isExtracting} onClick={retryExtraction} type="button">{isExtracting ? "正在重试…" : "重试 AI 提炼"}</button> : null}{extractionRun.status === "succeeded" ? <Link className="button" href="/extraction">打开候选队列</Link> : null}</div> : null}{extractionError ? <p className="inline-error" role="alert">{extractionError}</p> : null}{reparseError ? <p className="inline-error" role="alert">{reparseError}</p> : null}<Sections sourceId={sourceId} spaceId={spaceId} version={detail} /></article>;
+  return <article aria-labelledby={`version-${version.id}`} className={`version-card parse-${parseStatus}`}><div className="version-heading"><div><p className="state-kicker">VERSION {version.version_number}{latest ? " · LATEST" : ""}</p><h2 id={`version-${version.id}`}>{version.original_filename ?? version.source_uri ?? acquisitionLabels[version.acquisition_type]}</h2></div><span className={`parse-badge parse-${parseStatus}`}>{parseStatusLabels[parseStatus]}</span></div><dl className="version-facts"><div><dt>获取方式</dt><dd>{acquisitionLabels[version.acquisition_type]}</dd></div><div><dt>内容类型</dt><dd>{version.media_type ?? "未提供"}</dd></div><div><dt>原件大小</dt><dd>{version.size_bytes === null ? "未提供" : `${version.size_bytes.toLocaleString("zh-CN")} bytes`}</dd></div><div><dt>完成时间</dt><dd>{formatDate(version.completed_at)}</dd></div><div><dt>分段数量</dt><dd>{detail.section_count}</dd></div><div><dt>解析任务</dt><dd>{detail.parse_job ? `${detail.parse_job.status} · ${detail.parse_job.id}` : "暂无"}</dd></div></dl>{parseStatus === "queued" || parseStatus === "parsing" ? <div aria-live="polite" className="parse-state"><div><strong>{parseStatusLabels[parseStatus]}</strong><span>{detail.parse_job ? `任务进度 ${detail.parse_job.progress}%` : "正在等待服务端状态更新"}</span></div><progress aria-label="解析任务进度" max="100" value={detail.parse_job?.progress ?? 0}>{detail.parse_job?.progress ?? 0}%</progress></div> : null}{parseStatus === "failed" ? <div className="inline-error parse-error" role="alert"><strong>解析未完成</strong><p>{detail.current_parse_artifact?.error_message ?? detail.parse_job?.error_message ?? "服务端没有提供失败说明。"}</p></div> : null}{detail.current_parse_artifact ? <ArtifactSummary artifact={detail.current_parse_artifact} /> : null}<div className="version-actions"><button className="button" disabled={isReparsing || parseStatus === "queued" || parseStatus === "parsing"} onClick={reparse} type="button">{isReparsing ? "正在确认重新解析…" : "重新解析此版本"}</button>{extractionEnabled && parseStatus === "ready" && detail.section_count > 0 && !extractionRun ? <button className="button primary" disabled={isExtracting} onClick={extract} type="button">{isExtracting ? "正在创建提炼任务…" : "启动 AI 提炼"}</button> : null}<small>提炼任务只读取当前可信 parse revision；候选完成后进入 D4 队列，不会直接写入知识树。</small></div>{extractionRun ? <div className="job-state" role="status"><strong>{extractionRun.status === "succeeded" ? "AI 提炼已完成" : extractionRun.status === "failed" ? "AI 提炼失败" : "AI 提炼进行中"}</strong><p>Job {extractionRun.id} · {extractionRun.status} · {extractionRun.progress}%</p>{extractionRun.status === "queued" || extractionRun.status === "running" ? <progress aria-label="AI 提炼任务进度" max="100" value={extractionRun.progress}>{extractionRun.progress}%</progress> : null}{extractionRun.error_message ? <p>{extractionRun.error_message}</p> : null}{extractionRun.retryable ? <button className="button" disabled={isExtracting} onClick={retryExtraction} type="button">{isExtracting ? "正在重试…" : "重试 AI 提炼"}</button> : null}{extractionRun.status === "succeeded" ? <Link className="button" href="/extraction">打开候选队列</Link> : null}</div> : null}{extractionError ? <p className="inline-error" role="alert">{extractionError}</p> : null}{reparseError ? <p className="inline-error" role="alert">{reparseError}</p> : null}<Sections deepLink={deepLink} sourceId={sourceId} spaceId={spaceId} version={detail} /></article>;
 }
 
-export function SourceDetail({ sourceId }: { sourceId: string }) {
+export function SourceDetail({ sourceId, deepLink }: { sourceId: string; deepLink?: SourceDeepLink }) {
   const bootstrapQuery = useQuery({ queryKey: ["bootstrap"], queryFn: fetchBootstrap });
   const spaceId = bootstrapQuery.data?.space.id;
   const detailsQuery = useQuery({ queryKey: ["source-details", spaceId, sourceId], queryFn: ({ signal }) => getSourceDetails(spaceId!, sourceId, { signal }), enabled: Boolean(spaceId), refetchInterval: (query) => shouldPoll(query.state.data?.versions) ? 1_000 : false });
@@ -215,5 +238,20 @@ export function SourceDetail({ sourceId }: { sourceId: string }) {
   if (bootstrapQuery.isError || !spaceId) return <section><PageHeader eyebrow="SOURCE · D3" title="来源详情" description="需要先连接默认个人知识空间。" /><div className="state-card error-state" role="alert"><h2>无法取得默认知识空间</h2><button className="button primary" onClick={() => bootstrapQuery.refetch()} type="button">重试连接</button></div></section>;
   if (detailsQuery.isError || !detailsQuery.data) return <section><PageHeader eyebrow="SOURCE · D3" title="来源详情" description="页面不会用缓存或示例数据替代失败的详情请求。" /><div className="state-card error-state" role="alert"><div><p className="state-kicker">SOURCE DETAILS · UNAVAILABLE</p><h2>无法读取来源详情</h2><p>{errorMessage(detailsQuery.error)}</p></div><div className="form-actions"><button className="button primary" onClick={() => detailsQuery.refetch()} type="button">重新加载</button><Link className="button" href="/import">返回导入</Link></div></div></section>;
   const { source, versions } = detailsQuery.data;
-  return <section aria-labelledby="source-title"><Link className="back-link" href="/import">← 返回来源列表</Link><PageHeader eyebrow={`SOURCE · ${sourceKindLabels[source.kind]} · ${source.status.toUpperCase()}`} headingId="source-title" title={source.title} description={`共 ${versions.length} 个不可变版本。解析状态、产物与 section 均来自来源详情 API。`} />{versions.length === 0 ? <div className="source-empty panel-card"><strong>这个来源还没有版本</strong><p>页面不会为尚未创建的版本生成占位内容。</p></div> : <div className="version-list">{versions.map((version, index) => <VersionCard detail={version} extractionEnabled={bootstrapQuery.data.capabilities.extraction_review} key={version.version.id} latest={index === 0} sourceId={sourceId} spaceId={spaceId} />)}</div>}</section>;
+  const latestVersionId = versions.reduce<string | null>(
+    (latestId, item) => {
+      const latest = versions.find((candidate) => candidate.version.id === latestId);
+      return latest && latest.version.version_number >= item.version.version_number
+        ? latestId
+        : item.version.id;
+    },
+    null,
+  );
+  const orderedVersions = deepLink?.versionId
+    ? [
+        ...versions.filter((item) => item.version.id === deepLink.versionId),
+        ...versions.filter((item) => item.version.id !== deepLink.versionId),
+      ]
+    : versions;
+  return <section aria-labelledby="source-title"><Link className="back-link" href="/import">← 返回来源列表</Link><PageHeader eyebrow={`SOURCE · ${sourceKindLabels[source.kind]} · ${source.status.toUpperCase()}`} headingId="source-title" title={source.title} description={`共 ${versions.length} 个不可变版本。解析状态、产物与 section 均来自来源详情 API。`} />{versions.length === 0 ? <div className="source-empty panel-card"><strong>这个来源还没有版本</strong><p>页面不会为尚未创建的版本生成占位内容。</p></div> : <div className="version-list">{orderedVersions.map((version) => <VersionCard deepLink={deepLink} detail={version} extractionEnabled={bootstrapQuery.data.capabilities.extraction_review} key={version.version.id} latest={version.version.id === latestVersionId} sourceId={sourceId} spaceId={spaceId} />)}</div>}</section>;
 }

@@ -90,9 +90,9 @@ const section = {
 };
 
 function json(payload: unknown, status = 200) { return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } }); }
-function renderDetail() {
+function renderDetail(deepLink?: { versionId?: string; artifactId?: string; sectionId?: string }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  return render(<QueryClientProvider client={client}><SourceDetail sourceId={ids.source} /></QueryClientProvider>);
+  return render(<QueryClientProvider client={client}><SourceDetail deepLink={deepLink} sourceId={ids.source} /></QueryClientProvider>);
 }
 
 describe("SourceDetail", () => {
@@ -109,7 +109,7 @@ describe("SourceDetail", () => {
       if (url.endsWith(`/sources/${ids.source}/details`)) return Promise.resolve(json(details));
       if (url.includes(`/versions/${ids.version}/sections`)) {
         sectionReads += 1;
-        return Promise.resolve(json({ items: [{ ...section, id: sectionReads === 1 ? ids.section : "247197b5-4e02-4442-a0a6-280151242198", ordinal: sectionReads - 1, text: sectionReads === 1 ? section.text : "第二段可信正文" }], next_cursor: sectionReads === 1 ? "next/cursor" : null, artifact }));
+        return Promise.resolve(json({ items: [{ ...section, id: sectionReads === 1 ? ids.section : "247197b5-4e02-4442-a0a6-280151242198", ordinal: sectionReads - 1, text: sectionReads === 1 ? section.text : "第二段可信正文" }], previous_cursor: null, next_cursor: sectionReads === 1 ? "next/cursor" : null, artifact }));
       }
       throw new Error(`Unexpected request ${url}`);
     });
@@ -126,6 +126,106 @@ describe("SourceDetail", () => {
     expect(sectionUrls[1]).toContain("cursor=next%2Fcursor");
   });
 
+  it("loads and focuses the exact historical citation target", async () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/bootstrap")) return Promise.resolve(json(bootstrap));
+      if (url.endsWith(`/sources/${ids.source}/details`)) return Promise.resolve(json(details));
+      if (url.includes(`/versions/${ids.version}/sections`)) {
+        return Promise.resolve(json({ items: [section], previous_cursor: null, next_cursor: null, artifact }));
+      }
+      throw new Error(`Unexpected request ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDetail({
+      versionId: ids.version,
+      artifactId: ids.artifact,
+      sectionId: ids.section,
+    });
+
+    const target = await screen.findByText(section.text);
+    await waitFor(() => expect(target.closest("li")).toHaveClass("section-card-target"));
+    expect(target.closest("li")).toHaveFocus();
+    expect(scrollIntoView).toHaveBeenCalled();
+    const sectionsUrl = fetchMock.mock.calls
+      .map(([url]) => String(url))
+      .find((url) => url.includes("/sections?"));
+    expect(sectionsUrl).toContain(`artifact_id=${ids.artifact}`);
+    expect(sectionsUrl).toContain(`anchor_section_id=${ids.section}`);
+  });
+
+  it("loads ready historical sections while the current parse is queued", async () => {
+    const historicalArtifact = {
+      ...artifact,
+      id: "247197b5-4e02-4442-a0a6-280151242198",
+      revision: 1,
+    };
+    const historicalSection = {
+      ...section,
+      artifact_id: historicalArtifact.id,
+      artifact_revision: 1,
+    };
+    const queuedDetails = {
+      source,
+      versions: [{
+        version: { ...version, parse_status: "queued" },
+        parse_job: { ...parseJob, status: "queued", progress: 10 },
+        current_parse_artifact: { ...artifact, status: "queued" },
+        section_count: 0,
+      }],
+    };
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/bootstrap")) return Promise.resolve(json(bootstrap));
+      if (url.endsWith(`/sources/${ids.source}/details`)) return Promise.resolve(json(queuedDetails));
+      if (url.includes(`/versions/${ids.version}/sections`)) {
+        return Promise.resolve(json({ items: [historicalSection], previous_cursor: null, next_cursor: null, artifact: historicalArtifact }));
+      }
+      throw new Error(`Unexpected request ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDetail({
+      versionId: ids.version,
+      artifactId: historicalArtifact.id,
+      sectionId: historicalSection.id,
+    });
+
+    expect(await screen.findByText(historicalSection.text)).toBeInTheDocument();
+    const sectionsUrl = fetchMock.mock.calls
+      .map(([url]) => String(url))
+      .find((url) => url.includes("/sections?"));
+    expect(sectionsUrl).toContain(`artifact_id=${historicalArtifact.id}`);
+  });
+
+  it("marks the highest version as latest after historical reordering", async () => {
+    const olderVersion = { ...version, id: "247197b5-4e02-4442-a0a6-280151242198", version_number: 1 };
+    const newerVersion = { ...version, version_number: 2 };
+    const multiVersionDetails = {
+      source,
+      versions: [
+        { ...details.versions[0], version: newerVersion },
+        { ...details.versions[0], version: olderVersion },
+      ],
+    };
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/v1/bootstrap")) return Promise.resolve(json(bootstrap));
+      if (url.endsWith(`/sources/${ids.source}/details`)) return Promise.resolve(json(multiVersionDetails));
+      if (url.includes("/sections?")) return Promise.resolve(json({ items: [], previous_cursor: null, next_cursor: null, artifact }));
+      throw new Error(`Unexpected request ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderDetail({ versionId: olderVersion.id, artifactId: ids.artifact });
+
+    expect(await screen.findByText("VERSION 1")).toBeInTheDocument();
+    expect(screen.getByText("VERSION 2 · LATEST")).toBeInTheDocument();
+  });
+
   it("reconciles an uncertain reparse response and keeps the same operation key", async () => {
     let detailReads = 0;
     const queuedArtifact = { ...artifact, id: "1c24fab5-62ec-4844-afb9-6f35fd466730", revision: 2, status: "queued", completed_at: null };
@@ -133,7 +233,7 @@ describe("SourceDetail", () => {
     const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/api/v1/bootstrap")) return Promise.resolve(json(bootstrap));
-      if (url.endsWith(`/versions/${ids.version}/sections`)) return Promise.resolve(json({ items: [], next_cursor: null, artifact }));
+      if (url.endsWith(`/versions/${ids.version}/sections`)) return Promise.resolve(json({ items: [], previous_cursor: null, next_cursor: null, artifact }));
       if (url.endsWith(`/versions/${ids.version}/reparse`) && init?.method === "POST") return Promise.reject(new TypeError("response lost"));
       if (url.endsWith(`/sources/${ids.source}/details`)) {
         detailReads += 1;

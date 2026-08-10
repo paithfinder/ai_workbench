@@ -242,16 +242,23 @@ describe("source API", () => {
     };
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(json(details))
-      .mockResolvedValueOnce(json({ items: [section], next_cursor: "next/cursor", artifact }))
+      .mockResolvedValueOnce(json({ items: [section], previous_cursor: null, next_cursor: "next/cursor", artifact }))
       .mockResolvedValueOnce(json({ job: parseJob, artifact }, 202));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(getSourceDetails(ids.space, ids.source)).resolves.toEqual(details);
-    await expect(listSourceSections(ids.space, ids.source, ids.version, { limit: 10, cursor: "cursor/一" })).resolves.toEqual({ items: [section], next_cursor: "next/cursor", artifact });
+    await expect(listSourceSections(ids.space, ids.source, ids.version, {
+      limit: 10,
+      cursor: "cursor/一",
+      artifactId: artifact.id,
+      sectionId: section.id,
+    })).resolves.toEqual({ items: [section], previous_cursor: null, next_cursor: "next/cursor", artifact });
     await expect(reparseSourceVersion(ids.space, ids.source, ids.version, "reparse-key")).resolves.toEqual({ job: parseJob, artifact });
 
     const [sectionsUrl] = fetchMock.mock.calls[1] as [string, RequestInit];
     expect(sectionsUrl).toContain("limit=10&cursor=cursor%2F%E4%B8%80");
+    expect(sectionsUrl).toContain(`artifact_id=${artifact.id}`);
+    expect(sectionsUrl).toContain(`anchor_section_id=${section.id}`);
     const [reparseUrl, reparseInit] = fetchMock.mock.calls[2] as [string, RequestInit];
     expect(reparseUrl).toContain(`/versions/${ids.version}/reparse`);
     expect(reparseInit.body).toBeUndefined();
