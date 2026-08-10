@@ -144,6 +144,16 @@ describe("source API", () => {
     expect(new Headers(retryInit.headers).get("Idempotency-Key")).toBe("retry-key");
   });
 
+  it("accepts extraction and index job kinds returned by the backend", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(json({ ...job, kind: "source_extract" }))
+      .mockResolvedValueOnce(json({ ...job, kind: "source_index" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getJob(ids.space, ids.job)).resolves.toMatchObject({ kind: "source_extract" });
+    await expect(getJob(ids.space, ids.job)).resolves.toMatchObject({ kind: "source_index" });
+  });
+
   it("accepts every persisted source kind while file creation stays limited", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({
       items: [

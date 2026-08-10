@@ -62,11 +62,19 @@ export const jobStatusSchema = z.enum([
 ]);
 export type JobStatus = z.infer<typeof jobStatusSchema>;
 
+export const jobKindSchema = z.enum([
+  "source_ingest",
+  "source_parse",
+  "source_extract",
+  "source_index",
+]);
+export type JobKind = z.infer<typeof jobKindSchema>;
+
 export const jobSchema = z.object({
   id: uuid,
   space_id: uuid,
   source_version_id: uuid.nullable(),
-  kind: z.enum(["source_ingest", "source_parse"]),
+  kind: jobKindSchema,
   status: jobStatusSchema,
   progress: z.number().int().min(0).max(100),
   attempt_count: z.number().int().nonnegative(),
