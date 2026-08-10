@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import math
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -13,7 +14,14 @@ from knowledge_workbench.application.canonical_document import (
     CanonicalDocument,
 )
 from knowledge_workbench.application.ports.document_parser import ParseInput
-from knowledge_workbench.application.source_parsing import section_from_block
+from knowledge_workbench.application.source_parsing import (
+    SourceParsingService,
+    _decode_cursor,
+    _encode_cursor_position,
+    section_from_block,
+)
+from knowledge_workbench.config import Settings
+from knowledge_workbench.core.errors import AppError
 from knowledge_workbench.infrastructure.parsing.fake import DeterministicFakeParser
 
 
@@ -123,3 +131,128 @@ def test_section_locator_freezes_source_version_artifact_and_section() -> None:
         "bbox": None,
         "quoteHash": section.quote_hash,
     }
+
+
+class _ScalarRows:
+    def __init__(self, rows: list[object]) -> None:
+        self._rows = rows
+
+    def __iter__(self):  # type: ignore[no-untyped-def]
+        return iter(self._rows)
+
+
+class _HistoricalSectionSession:
+    def __init__(
+        self,
+        version: object,
+        artifact: object,
+        anchor: object,
+        rows: list[object],
+    ):
+        self._scalar_values = iter([version, artifact, anchor])
+        self.rows = rows
+
+    async def scalar(self, _statement: object) -> object:
+        return next(self._scalar_values)
+
+    async def scalars(self, _statement: object) -> _ScalarRows:
+        return _ScalarRows(self.rows)
+
+
+async def test_historical_artifact_anchor_is_read_without_current_redirect() -> None:
+    space_id = uuid4()
+    source_id = uuid4()
+    version_id = uuid4()
+    current_artifact_id = uuid4()
+    historical_artifact_id = uuid4()
+    section_id = uuid4()
+    version = SimpleNamespace(
+        id=version_id,
+        current_parse_artifact_id=current_artifact_id,
+    )
+    artifact = SimpleNamespace(id=historical_artifact_id, revision=1)
+    anchor = SimpleNamespace(id=section_id, ordinal=18)
+    section = SimpleNamespace(
+        id=section_id,
+        ordinal=18,
+        parse_artifact_id=historical_artifact_id,
+    )
+    session = _HistoricalSectionSession(
+        version,
+        artifact,
+        anchor,
+        [section],
+    )
+
+    page = await SourceParsingService(Settings(app_env="test")).list_sections(  # type: ignore[arg-type]
+        session,
+        space_id=space_id,
+        source_id=source_id,
+        version_id=version_id,
+        limit=20,
+        cursor=None,
+        artifact_id=historical_artifact_id,
+        anchor_section_id=section_id,
+    )
+
+    assert page.artifact.id == historical_artifact_id
+    assert page.artifact.id != current_artifact_id
+    assert page.items == [section]
+    assert page.previous_cursor is not None
+    _, cursor_ordinal, _, before_ordinal = _decode_cursor(page.previous_cursor)
+    assert cursor_ordinal == -1
+    assert before_ordinal == 8
+
+
+async def test_previous_cursor_returns_non_overlapping_window_and_can_continue() -> None:
+    artifact_id = uuid4()
+    version = SimpleNamespace(id=uuid4(), current_parse_artifact_id=artifact_id)
+    artifact = SimpleNamespace(id=artifact_id, revision=1)
+    earlier = [
+        SimpleNamespace(id=uuid4(), ordinal=ordinal, parse_artifact_id=artifact_id)
+        for ordinal in range(28, 48)
+    ]
+    session = _HistoricalSectionSession(version, artifact, None, earlier)
+
+    page = await SourceParsingService(Settings(app_env="test")).list_sections(  # type: ignore[arg-type]
+        session,
+        space_id=uuid4(),
+        source_id=uuid4(),
+        version_id=version.id,
+        limit=20,
+        cursor=_encode_cursor_position(
+            artifact_id,
+            27,
+            uuid4(),
+            before_ordinal=48,
+        ),
+        artifact_id=artifact_id,
+        anchor_section_id=None,
+    )
+
+    assert [item.ordinal for item in page.items] == list(range(28, 48))
+    assert page.next_cursor is None
+    assert page.previous_cursor is not None
+    _, cursor_ordinal, _, before_ordinal = _decode_cursor(page.previous_cursor)
+    assert cursor_ordinal == 7
+    assert before_ordinal == 28
+
+
+async def test_historical_anchor_must_belong_to_selected_artifact() -> None:
+    version = SimpleNamespace(id=uuid4(), current_parse_artifact_id=uuid4())
+    artifact = SimpleNamespace(id=uuid4(), revision=1)
+    session = _HistoricalSectionSession(version, artifact, None, [])
+
+    with pytest.raises(AppError) as caught:
+        await SourceParsingService(Settings(app_env="test")).list_sections(  # type: ignore[arg-type]
+            session,
+            space_id=uuid4(),
+            source_id=uuid4(),
+            version_id=version.id,
+            limit=20,
+            cursor=None,
+            artifact_id=artifact.id,
+            anchor_section_id=uuid4(),
+        )
+
+    assert caught.value.code == "source_section_not_found"

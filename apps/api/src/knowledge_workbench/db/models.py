@@ -9,6 +9,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -22,6 +23,14 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+from sqlalchemy.types import UserDefinedType
+
+
+class Ltree(UserDefinedType[str]):
+    cache_ok = True
+
+    def get_col_spec(self, **_kw: object) -> str:
+        return "LTREE"
 
 
 class Base(DeclarativeBase):
@@ -73,6 +82,40 @@ class ParseArtifactStatus(StrEnum):
 class ParseRequestKind(StrEnum):
     INITIAL = "initial"
     REPARSE = "reparse"
+
+
+class ExtractionStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class CandidateStatus(StrEnum):
+    PENDING_REVIEW = "pending_review"
+    NEEDS_VERIFICATION = "needs_verification"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class CandidateReviewAction(StrEnum):
+    EDIT = "edit"
+    ACCEPT = "accept"
+    MARK_NEEDS_VERIFICATION = "mark_needs_verification"
+    REJECT = "reject"
+
+
+class KnowledgeNodeKind(StrEnum):
+    ROOT = "root"
+    FOLDER = "folder"
+    DOCUMENT = "document"
+    POINT = "point"
+    SOURCE = "source"
+
+
+class CandidateAtomicity(StrEnum):
+    ATOMIC = "atomic"
+    NEEDS_SPLIT = "needs_split"
 
 
 class JobAttemptStatus(StrEnum):
@@ -424,6 +467,528 @@ class SourceParseRequest(Base):
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ExtractionJob(Base):
+    __tablename__ = "extraction_jobs"
+    __table_args__ = (
+        UniqueConstraint("job_id", name="uq_extraction_jobs_job"),
+        UniqueConstraint(
+            "source_version_id", "prompt_version", name="uq_extraction_jobs_version_prompt"
+        ),
+        CheckConstraint(
+            "status IN ('queued','running','ready','failed')",
+            name="ck_extraction_jobs_status",
+        ),
+        CheckConstraint(
+            "input_tokens >= 0 AND output_tokens >= 0 AND latency_ms >= 0",
+            name="ck_extraction_jobs_metrics_nonnegative",
+        ),
+        Index("ix_extraction_jobs_space_status_created", "space_id", "status", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    job_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("jobs.id", ondelete="RESTRICT"), nullable=False
+    )
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    source_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("source_versions.id", ondelete="CASCADE"), nullable=False
+    )
+    parse_artifact_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("source_parse_artifacts.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ExtractionStatus.QUEUED
+    )
+    provider: Mapped[str | None] = mapped_column(String(100))
+    model: Mapped[str] = mapped_column(String(200), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    error_message: Mapped[str | None] = mapped_column(String(2000))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ExtractionCandidate(Base):
+    __tablename__ = "extraction_candidates"
+    __table_args__ = (
+        UniqueConstraint("extraction_job_id", "ordinal", name="uq_extraction_candidates_ordinal"),
+        CheckConstraint("ordinal >= 0", name="ck_extraction_candidates_ordinal_nonnegative"),
+        CheckConstraint(
+            "status IN ('pending_review','needs_verification','accepted','rejected')",
+            name="ck_extraction_candidates_status",
+        ),
+        CheckConstraint(
+            "atomicity IN ('atomic','needs_split')",
+            name="ck_extraction_candidates_atomicity",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1", name="ck_extraction_candidates_confidence"
+        ),
+        CheckConstraint(
+            "status <> 'needs_verification' OR "
+            "(verification_reason IS NOT NULL AND btrim(verification_reason) <> '')",
+            name="ck_extraction_candidates_verification_reason",
+        ),
+        CheckConstraint(
+            "status = 'rejected' OR rejection_reason IS NULL",
+            name="ck_extraction_candidates_rejection_reason",
+        ),
+        CheckConstraint("version > 0", name="ck_extraction_candidates_version_positive"),
+        Index("ix_extraction_candidates_space_status_created", "space_id", "status", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    extraction_job_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("extraction_jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    source_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("source_versions.id", ondelete="RESTRICT"), nullable=False
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    tags: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    suggested_destination_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    atomicity: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    verification_reason: Mapped[str | None] = mapped_column(String(1000))
+    rejection_reason: Mapped[str | None] = mapped_column(String(1000))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    conditions: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    exceptions: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class CandidateEvidence(Base):
+    __tablename__ = "candidate_evidence"
+    __table_args__ = (
+        UniqueConstraint("candidate_id", "section_id", name="uq_candidate_evidence_section"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    candidate_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("extraction_candidates.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    source_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("source_versions.id", ondelete="RESTRICT"), nullable=False
+    )
+    section_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("source_sections.id", ondelete="RESTRICT"), nullable=False
+    )
+    quote_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class KnowledgeNode(TimestampMixin, Base):
+    __tablename__ = "knowledge_nodes"
+    __table_args__ = (
+        UniqueConstraint("id", "space_id", name="uq_knowledge_nodes_id_space"),
+        UniqueConstraint("origin_candidate_id", name="uq_knowledge_nodes_origin_candidate"),
+        ForeignKeyConstraint(
+            ["parent_id", "space_id"],
+            ["knowledge_nodes.id", "knowledge_nodes.space_id"],
+            name="fk_knowledge_nodes_parent_space",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_version_id", "source_id"],
+            ["source_versions.id", "source_versions.source_id"],
+            name="fk_knowledge_nodes_source_version_source",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["id", "current_revision_id"],
+            ["knowledge_revisions.node_id", "knowledge_revisions.id"],
+            name="fk_knowledge_nodes_current_revision",
+            ondelete="RESTRICT",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        CheckConstraint(
+            "kind IN ('root','folder','document','point','source')",
+            name="ck_knowledge_nodes_kind",
+        ),
+        CheckConstraint(
+            "(kind = 'root' AND parent_id IS NULL AND source_id IS NULL "
+            "AND source_version_id IS NULL AND origin_candidate_id IS NULL) OR "
+            "(kind = 'source' AND parent_id IS NOT NULL AND source_id IS NOT NULL "
+            "AND source_version_id IS NOT NULL AND current_revision_id IS NULL "
+            "AND origin_candidate_id IS NULL) OR "
+            "(kind IN ('folder','document') AND parent_id IS NOT NULL "
+            "AND source_id IS NULL AND source_version_id IS NULL "
+            "AND origin_candidate_id IS NULL) OR "
+            "(kind = 'point' AND parent_id IS NOT NULL AND source_id IS NULL "
+            "AND source_version_id IS NULL)",
+            name="ck_knowledge_nodes_shape",
+        ),
+        CheckConstraint("version > 0", name="ck_knowledge_nodes_version_positive"),
+        CheckConstraint("sort_order >= 0", name="ck_knowledge_nodes_sort_nonnegative"),
+        Index("ix_knowledge_nodes_space_parent_kind", "space_id", "parent_id", "kind"),
+        Index(
+            "ix_knowledge_nodes_space_parent_order",
+            "space_id",
+            "parent_id",
+            "sort_order",
+            "id",
+        ),
+        Index("ix_knowledge_nodes_path", "path", postgresql_using="gist"),
+        Index(
+            "uq_knowledge_nodes_space_path",
+            "space_id",
+            "path",
+            unique=True,
+        ),
+        Index(
+            "uq_knowledge_nodes_space_root",
+            "space_id",
+            unique=True,
+            postgresql_where=sql_text("kind = 'root' AND deleted_at IS NULL"),
+        ),
+        Index(
+            "uq_knowledge_nodes_document_source_version",
+            "space_id",
+            "parent_id",
+            "source_version_id",
+            unique=True,
+            postgresql_where=sql_text("kind = 'source' AND deleted_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    parent_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    origin_candidate_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("extraction_candidates.id", ondelete="RESTRICT"),
+    )
+    current_revision_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    path: Mapped[str] = mapped_column(Ltree(), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    source_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("sources.id", ondelete="RESTRICT")
+    )
+    source_version_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class KnowledgeRevision(Base):
+    __tablename__ = "knowledge_revisions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["node_id", "space_id"],
+            ["knowledge_nodes.id", "knowledge_nodes.space_id"],
+            name="fk_knowledge_revisions_node_space",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("node_id", "id", name="uq_knowledge_revisions_node_id"),
+        UniqueConstraint("node_id", "revision_number", name="uq_knowledge_revisions_node_number"),
+        CheckConstraint(
+            "content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_knowledge_revisions_content_hash",
+        ),
+        CheckConstraint(
+            "revision_number > 0", name="ck_knowledge_revisions_number_positive"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    node_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    space_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    tags: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    conditions: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    exceptions: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    edit_reason: Mapped[str | None] = mapped_column(String(1000))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class KnowledgeEvidence(Base):
+    __tablename__ = "knowledge_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["parse_artifact_id", "source_version_id"],
+            ["source_parse_artifacts.id", "source_parse_artifacts.source_version_id"],
+            name="fk_knowledge_evidence_artifact_version",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("revision_id", "section_id", name="uq_knowledge_evidence_section"),
+        CheckConstraint(
+            "quote_hash ~ '^[0-9a-f]{64}$'", name="ck_knowledge_evidence_quote_hash"
+        ),
+        CheckConstraint(
+            "content_hash ~ '^[0-9a-f]{64}$'", name="ck_knowledge_evidence_content_hash"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    revision_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("knowledge_revisions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    source_version_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    parse_artifact_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    section_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("source_sections.id", ondelete="RESTRICT"), nullable=False
+    )
+    quote_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    locator: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    frozen_quote: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class KnowledgeWriteRequest(Base):
+    __tablename__ = "knowledge_write_requests"
+    __table_args__ = (
+        UniqueConstraint("space_id", "idempotency_key", name="uq_knowledge_write_requests_key"),
+        CheckConstraint(
+            "operation IN ('create','edit','move','delete')",
+            name="ck_knowledge_write_requests_operation",
+        ),
+        CheckConstraint(
+            "request_hash ~ '^[0-9a-f]{64}$'", name="ck_knowledge_write_requests_hash"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    operation: Mapped[str] = mapped_column(String(32), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class KnowledgeWriteResult(Base):
+    __tablename__ = "knowledge_write_results"
+    __table_args__ = (
+        UniqueConstraint("request_id", name="uq_knowledge_write_results_request"),
+        CheckConstraint("node_version > 0", name="ck_knowledge_write_results_version"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("knowledge_write_requests.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    node_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_nodes.id", ondelete="RESTRICT"), nullable=False
+    )
+    node_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ReviewCard(Base):
+    __tablename__ = "review_cards"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["knowledge_node_id", "space_id"],
+            ["knowledge_nodes.id", "knowledge_nodes.space_id"],
+            name="fk_review_cards_node_space",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("knowledge_node_id", name="uq_review_cards_node"),
+        CheckConstraint("status IN ('active','retired')", name="ck_review_cards_status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    knowledge_node_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    knowledge_revision_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("knowledge_revisions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CandidateReview(Base):
+    __tablename__ = "candidate_reviews"
+    __table_args__ = (
+        UniqueConstraint("candidate_id", "to_version", name="uq_candidate_reviews_version"),
+        CheckConstraint(
+            "action IN ('edit','accept','mark_needs_verification','reject')",
+            name="ck_candidate_reviews_action",
+        ),
+        CheckConstraint(
+            "from_version > 0 AND to_version = from_version + 1",
+            name="ck_candidate_reviews_versions",
+        ),
+        Index("ix_candidate_reviews_space_created", "space_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    candidate_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("extraction_candidates.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(1000))
+    before_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    after_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    from_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    from_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    to_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CandidateReviewRequest(Base):
+    __tablename__ = "candidate_review_requests"
+    __table_args__ = (
+        UniqueConstraint(
+            "candidate_id", "idempotency_key", name="uq_candidate_review_requests_key"
+        ),
+        CheckConstraint(
+            "operation IN ('edit','accept','mark_needs_verification','reject')",
+            name="ck_candidate_review_requests_operation",
+        ),
+        CheckConstraint(
+            "request_hash ~ '^[0-9a-f]{64}$'", name="ck_candidate_review_requests_hash"
+        ),
+        CheckConstraint(
+            "expected_version > 0", name="ck_candidate_review_requests_version_positive"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    candidate_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("extraction_candidates.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    operation: Mapped[str] = mapped_column(String(32), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expected_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CandidateReviewResult(Base):
+    __tablename__ = "candidate_review_results"
+    __table_args__ = (
+        UniqueConstraint("request_id", name="uq_candidate_review_results_request"),
+        CheckConstraint(
+            "candidate_version > 0", name="ck_candidate_review_results_version_positive"
+        ),
+        CheckConstraint(
+            "candidate_status IN ('pending_review','needs_verification','accepted','rejected')",
+            name="ck_candidate_review_results_status",
+        ),
+        CheckConstraint(
+            "(candidate_status = 'accepted' AND knowledge_node_id IS NOT NULL "
+            "AND knowledge_revision_id IS NOT NULL AND review_card_id IS NOT NULL) OR "
+            "(candidate_status <> 'accepted' AND knowledge_node_id IS NULL "
+            "AND knowledge_revision_id IS NULL AND review_card_id IS NULL)",
+            name="ck_candidate_review_results_acceptance",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("candidate_review_requests.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    candidate_review_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("candidate_reviews.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    candidate_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    candidate_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    knowledge_node_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_nodes.id", ondelete="RESTRICT")
+    )
+    knowledge_revision_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_revisions.id", ondelete="RESTRICT")
+    )
+    review_card_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("review_cards.id", ondelete="RESTRICT")
+    )
+    evidence_ids: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

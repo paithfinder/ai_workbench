@@ -106,8 +106,11 @@ services:
       PARSER_VERSION: ${PARSER_VERSION:-2.117.0}
       OUTBOX_RELAY_INTERVAL_SECONDS: ${OUTBOX_RELAY_INTERVAL_SECONDS:-1.0}
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-50}
-      AI_PROVIDER: fake
-      CLAUDE_MODEL: claude-opus-5
+      AI_PROVIDER: ${AI_PROVIDER:-fake}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-120}
+      EXTRACTION_MAX_OUTPUT_TOKENS: ${EXTRACTION_MAX_OUTPUT_TOKENS:-16000}
+      EXTRACTION_BATCH_MAX_CHARACTERS: ${EXTRACTION_BATCH_MAX_CHARACTERS:-24000}
     command: ["alembic", "-c", "apps/api/alembic.ini", "upgrade", "head"]
     depends_on:
       postgres:
@@ -155,8 +158,11 @@ services:
       PARSER_VERSION: ${PARSER_VERSION:-2.117.0}
       OUTBOX_RELAY_INTERVAL_SECONDS: ${OUTBOX_RELAY_INTERVAL_SECONDS:-1.0}
       OUTBOX_BATCH_SIZE: ${OUTBOX_BATCH_SIZE:-50}
-      AI_PROVIDER: fake
-      CLAUDE_MODEL: claude-opus-5
+      AI_PROVIDER: ${AI_PROVIDER:-fake}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-120}
+      EXTRACTION_MAX_OUTPUT_TOKENS: ${EXTRACTION_MAX_OUTPUT_TOKENS:-16000}
+      EXTRACTION_BATCH_MAX_CHARACTERS: ${EXTRACTION_BATCH_MAX_CHARACTERS:-24000}
     ports:
       - "8000:8000"
     depends_on:
@@ -237,6 +243,35 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+    restart: unless-stopped
+
+  extract-worker:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_workbench}
+      POSTGRES_USER: ${POSTGRES_USER:-knowledge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-knowledge_dev}
+      CELERY_BROKER_URL: redis://redis:6379/1
+      JOB_ATTEMPT_LEASE_SECONDS: ${JOB_ATTEMPT_LEASE_SECONDS:-300}
+      AI_PROVIDER: ${AI_PROVIDER:-fake}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-120}
+      EXTRACTION_MAX_OUTPUT_TOKENS: ${EXTRACTION_MAX_OUTPUT_TOKENS:-16000}
+      EXTRACTION_BATCH_MAX_CHARACTERS: ${EXTRACTION_BATCH_MAX_CHARACTERS:-24000}
+    command: ["celery", "-A", "knowledge_workbench.worker.celery_app:celery_app", "worker", "--loglevel=INFO", "--queues=source-extract", "--concurrency=1"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   relay:

@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_workbench.application.source_ingestion import _validate_idempotency_key
 from knowledge_workbench.core.errors import AppError
 from knowledge_workbench.db.models import (
+    ExtractionJob,
+    ExtractionStatus,
     Job,
     JobKind,
     JobRetryRequest,
@@ -117,6 +119,23 @@ class JobService:
             artifact.started_at = None
             artifact.completed_at = None
             version.parse_status = ParseStatus.QUEUED.value
+        elif job_kind == JobKind.SOURCE_EXTRACT:
+            extraction = await session.scalar(
+                select(ExtractionJob)
+                .where(ExtractionJob.job_id == job.id)
+                .with_for_update()
+            )
+            if extraction is None:
+                raise AppError(
+                    "extraction_job_inconsistent",
+                    "The failed extraction record is unavailable.",
+                    status_code=500,
+                )
+            extraction.status = ExtractionStatus.QUEUED.value
+            extraction.error_code = None
+            extraction.error_message = None
+            extraction.started_at = None
+            extraction.completed_at = None
         next_attempt = job.attempt_count + 1
         request_id = uuid4()
         session.add(

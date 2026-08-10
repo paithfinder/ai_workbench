@@ -1,6 +1,10 @@
 from knowledge_workbench.config import Settings
 
 
+def _settings(**values: object) -> Settings:
+    return Settings(_env_file=None, **values)  # type: ignore[call-arg]
+
+
 def test_settings_parse_comma_separated_cors() -> None:
     settings = Settings(cors_origins="http://localhost:3000,http://127.0.0.1:3000")  # type: ignore[arg-type]
     assert settings.cors_origins == ["http://localhost:3000", "http://127.0.0.1:3000"]
@@ -46,7 +50,9 @@ def test_d3_non_file_ingestion_defaults_are_bounded() -> None:
     assert settings.web_fetch_max_redirects == 5
 
 
-def test_d1_ai_defaults_do_not_require_credentials() -> None:
-    settings = Settings()
+def test_d4_ai_defaults_do_not_require_credentials() -> None:
+    settings = _settings()
     assert settings.ai_provider == "fake"
     assert settings.claude_model == "claude-opus-5"
+    assert settings.ai_timeout_seconds == 120.0
+    assert settings.extraction_max_output_tokens == 16000

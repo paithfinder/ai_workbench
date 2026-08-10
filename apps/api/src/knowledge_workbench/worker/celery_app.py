@@ -16,6 +16,7 @@ celery_app.conf.update(
     task_routes={
         "knowledge_workbench.source_ingest": {"queue": "source-ingest"},
         "knowledge_workbench.source_parse": {"queue": "source-parse"},
+        "knowledge_workbench.source_extract": {"queue": "source-extract"},
     },
     task_acks_late=True,
     task_reject_on_worker_lost=True,

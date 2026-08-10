@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Generic, Protocol, TypeVar
+from typing import Any, Generic, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
 
@@ -11,7 +11,7 @@ ResponseT = TypeVar("ResponseT", bound=BaseModel)
 
 @dataclass(frozen=True, slots=True)
 class AIMessage:
-    role: str
+    role: Literal["user", "assistant"]
     content: str
 
 

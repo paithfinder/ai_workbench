@@ -8,8 +8,8 @@ from celery import Task  # type: ignore[import-untyped]
 from knowledge_workbench.config import get_settings
 from knowledge_workbench.db.models import JobKind
 from knowledge_workbench.worker.celery_app import celery_app
+from knowledge_workbench.worker.job_runner import ActiveJobLeaseError
 from knowledge_workbench.worker.source_ingest import (
-    ActiveJobLeaseError,
     IngestAttemptError,
     mark_transient_failure_sync,
     run_source_ingest_sync,
@@ -29,7 +29,7 @@ def _retry_countdown(retries: int) -> int:
     ignore_result=True,
 )
 def source_ingest(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
-    del space_id  # The worker revalidates the job's authoritative space in PostgreSQL.
+    del space_id
     request = self.request
     delivery_info = request.delivery_info or {}
     try:
@@ -41,9 +41,7 @@ def source_ingest(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
         )
     except ActiveJobLeaseError as exc:
         raise self.retry(
-            exc=exc,
-            countdown=exc.retry_after_seconds,
-            max_retries=MAX_TASK_RETRIES,
+            exc=exc, countdown=exc.retry_after_seconds, max_retries=MAX_TASK_RETRIES
         ) from exc
     except IngestAttemptError as exc:
         retries = request.retries or 0
@@ -71,32 +69,31 @@ def source_ingest(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
         ) from exc
 
 
-@celery_app.task(  # type: ignore[untyped-decorator]
-    bind=True,
-    name="knowledge_workbench.source_parse",
-    ignore_result=True,
-)
-def source_parse(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
-    """Dispatch to the parse worker when that D3 integration module is present."""
-    del space_id
-    try:
-        from knowledge_workbench.worker.job_runner import (
-            JobAttemptError as ParseAttemptError,
-        )
-        from knowledge_workbench.worker.job_runner import (
-            release_transient_attempt_sync as release_parse_attempt_sync,
-        )
+def _run_reliable_task(
+    self: Task[Any, Any], *, job_id: str, job_kind: JobKind
+) -> None:
+    from knowledge_workbench.worker.job_runner import JobAttemptError
+    from knowledge_workbench.worker.job_runner import (
+        release_transient_attempt_sync as release_attempt_sync,
+    )
+
+    if job_kind == JobKind.SOURCE_PARSE:
         from knowledge_workbench.worker.source_parse import (
-            mark_transient_failure_sync as mark_parse_failure_sync,
+            mark_transient_failure_sync as mark_failure_sync,
         )
-        from knowledge_workbench.worker.source_parse import run_source_parse_sync
-    except ImportError as exc:
-        raise RuntimeError("The source_parse worker integration is not available") from exc
+        from knowledge_workbench.worker.source_parse import run_source_parse_sync as run_sync
+    elif job_kind == JobKind.SOURCE_EXTRACT:
+        from knowledge_workbench.worker.source_extract import (
+            mark_transient_failure_sync as mark_failure_sync,
+        )
+        from knowledge_workbench.worker.source_extract import run_source_extract_sync as run_sync
+    else:
+        raise RuntimeError(f"Unsupported reliable task kind: {job_kind}")
 
     request = self.request
     delivery_info = request.delivery_info or {}
     try:
-        run_source_parse_sync(
+        run_sync(
             get_settings(),
             job_id=UUID(job_id),
             celery_task_id=request.id,
@@ -104,23 +101,21 @@ def source_parse(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
         )
     except ActiveJobLeaseError as exc:
         raise self.retry(
-            exc=exc,
-            countdown=exc.retry_after_seconds,
-            max_retries=MAX_TASK_RETRIES,
+            exc=exc, countdown=exc.retry_after_seconds, max_retries=MAX_TASK_RETRIES
         ) from exc
-    except ParseAttemptError as exc:
+    except JobAttemptError as exc:
         retries = request.retries or 0
         if retries >= MAX_TASK_RETRIES:
-            mark_parse_failure_sync(
+            mark_failure_sync(
                 get_settings(),
                 job_id=UUID(job_id),
                 token=exc.token,
                 message=f"Worker retries exhausted: {exc}",
             )
             return
-        release_parse_attempt_sync(
+        release_attempt_sync(
             get_settings(),
-            job_kind=JobKind.SOURCE_PARSE,
+            job_kind=job_kind,
             job_id=UUID(job_id),
             token=exc.token,
             message=str(exc),
@@ -139,3 +134,23 @@ def source_parse(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
             countdown=_retry_countdown(retries),
             max_retries=MAX_TASK_RETRIES,
         ) from exc
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    bind=True,
+    name="knowledge_workbench.source_parse",
+    ignore_result=True,
+)
+def source_parse(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
+    del space_id
+    _run_reliable_task(self, job_id=job_id, job_kind=JobKind.SOURCE_PARSE)
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    bind=True,
+    name="knowledge_workbench.source_extract",
+    ignore_result=True,
+)
+def source_extract(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
+    del space_id
+    _run_reliable_task(self, job_id=job_id, job_kind=JobKind.SOURCE_EXTRACT)

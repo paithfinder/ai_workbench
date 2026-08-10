@@ -40,6 +40,7 @@ class ScheduledParse:
 class SectionsPage:
     items: list[SourceSection]
     artifact: SourceParseArtifact
+    previous_cursor: str | None
     next_cursor: str | None
 
 
@@ -272,6 +273,8 @@ class SourceParsingService:
         version_id: UUID,
         limit: int,
         cursor: str | None,
+        artifact_id: UUID | None = None,
+        anchor_section_id: UUID | None = None,
     ) -> SectionsPage:
         if limit < 1 or limit > 100:
             raise AppError(
@@ -291,7 +294,8 @@ class SourceParsingService:
             raise AppError(
                 "source_version_not_found", "Source version was not found.", status_code=404
             )
-        if version.current_parse_artifact_id is None:
+        selected_artifact_id = artifact_id or version.current_parse_artifact_id
+        if selected_artifact_id is None:
             raise AppError(
                 "source_not_parsed",
                 "This source version has no ready parse artifact.",
@@ -299,7 +303,7 @@ class SourceParsingService:
             )
         artifact = await session.scalar(
             select(SourceParseArtifact).where(
-                SourceParseArtifact.id == version.current_parse_artifact_id,
+                SourceParseArtifact.id == selected_artifact_id,
                 SourceParseArtifact.source_version_id == version.id,
                 SourceParseArtifact.status == ParseArtifactStatus.READY.value,
             )
@@ -310,9 +314,41 @@ class SourceParsingService:
                 "This source version has no ready parse artifact.",
                 status_code=409,
             )
-        query = select(SourceSection).where(SourceSection.parse_artifact_id == artifact.id)
+        previous_cursor: str | None = None
+        before_ordinal: int | None = None
+        if anchor_section_id is not None and cursor is None:
+            anchor = await session.scalar(
+                select(SourceSection).where(
+                    SourceSection.id == anchor_section_id,
+                    SourceSection.space_id == space_id,
+                    SourceSection.source_version_id == version.id,
+                    SourceSection.parse_artifact_id == artifact.id,
+                )
+            )
+            if anchor is None:
+                raise AppError(
+                    "source_section_not_found",
+                    "The requested section does not belong to this parse artifact.",
+                    status_code=404,
+                )
+            start_ordinal = max(0, anchor.ordinal - limit // 2)
+            if start_ordinal > 0:
+                previous_cursor = _encode_cursor_position(
+                    artifact.id,
+                    max(-1, start_ordinal - limit - 1),
+                    UUID(int=0),
+                    before_ordinal=start_ordinal,
+                )
+            query = select(SourceSection).where(
+                SourceSection.parse_artifact_id == artifact.id,
+                SourceSection.ordinal >= start_ordinal,
+            )
+        else:
+            query = select(SourceSection).where(
+                SourceSection.parse_artifact_id == artifact.id
+            )
         if cursor:
-            cursor_artifact_id, ordinal, section_id = _decode_cursor(cursor)
+            cursor_artifact_id, ordinal, section_id, before_ordinal = _decode_cursor(cursor)
             if cursor_artifact_id != artifact.id:
                 raise AppError(
                     "stale_cursor",
@@ -325,6 +361,8 @@ class SourceParsingService:
                     and_(SourceSection.ordinal == ordinal, SourceSection.id > section_id),
                 )
             )
+            if before_ordinal is not None:
+                query = query.where(SourceSection.ordinal < before_ordinal)
         rows = list(
             await session.scalars(
                 query.order_by(SourceSection.ordinal, SourceSection.id).limit(limit + 1)
@@ -332,8 +370,18 @@ class SourceParsingService:
         )
         has_more = len(rows) > limit
         items = rows[:limit]
-        next_cursor = _encode_cursor(items[-1]) if has_more and items else None
-        return SectionsPage(items, artifact, next_cursor)
+        if before_ordinal is not None:
+            if items and items[0].ordinal > 0:
+                previous_cursor = _encode_cursor_position(
+                    artifact.id,
+                    max(-1, items[0].ordinal - limit - 1),
+                    UUID(int=0),
+                    before_ordinal=items[0].ordinal,
+                )
+            next_cursor = None
+        else:
+            next_cursor = _encode_cursor(items[-1]) if has_more and items else None
+        return SectionsPage(items, artifact, previous_cursor, next_cursor)
 
     def _new_artifact(self, version_id: UUID, *, revision: int) -> SourceParseArtifact:
         return SourceParseArtifact(
@@ -472,22 +520,46 @@ def _parse_request_hash(version_id: UUID, kind: str) -> str:
 
 
 def _encode_cursor(section: SourceSection) -> str:
-    payload = json.dumps(
-        {
-            "artifact_id": str(section.parse_artifact_id),
-            "id": str(section.id),
-            "ordinal": section.ordinal,
-        },
-        separators=(",", ":"),
-    ).encode()
+    return _encode_cursor_position(
+        section.parse_artifact_id,
+        section.ordinal,
+        section.id,
+    )
+
+
+def _encode_cursor_position(
+    artifact_id: UUID,
+    ordinal: int,
+    section_id: UUID,
+    *,
+    before_ordinal: int | None = None,
+) -> str:
+    cursor_payload: dict[str, str | int] = {
+        "artifact_id": str(artifact_id),
+        "id": str(section_id),
+        "ordinal": ordinal,
+    }
+    if before_ordinal is not None:
+        cursor_payload["before_ordinal"] = before_ordinal
+    payload = json.dumps(cursor_payload, separators=(",", ":")).encode()
     return base64.urlsafe_b64encode(payload).decode().rstrip("=")
 
 
-def _decode_cursor(cursor: str) -> tuple[UUID, int, UUID]:
+def _decode_cursor(cursor: str) -> tuple[UUID, int, UUID, int | None]:
     try:
         raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4))
         payload = json.loads(raw)
-        return UUID(payload["artifact_id"]), int(payload["ordinal"]), UUID(payload["id"])
+        before_ordinal = payload.get("before_ordinal")
+        if before_ordinal is not None:
+            before_ordinal = int(before_ordinal)
+            if before_ordinal < 0:
+                raise ValueError("before_ordinal must be non-negative")
+        return (
+            UUID(payload["artifact_id"]),
+            int(payload["ordinal"]),
+            UUID(payload["id"]),
+            before_ordinal,
+        )
     except (ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise AppError(
             "invalid_cursor", "The sections cursor is invalid.", status_code=422

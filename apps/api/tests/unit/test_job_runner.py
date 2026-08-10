@@ -30,9 +30,10 @@ from knowledge_workbench.worker.job_runner import (
 def test_requested_event_type_is_explicit_by_job_kind() -> None:
     assert requested_event_type(JobKind.SOURCE_INGEST) == "job.source_ingest.requested"
     assert requested_event_type(JobKind.SOURCE_PARSE) == "job.source_parse.requested"
+    assert requested_event_type(JobKind.SOURCE_EXTRACT) == "job.source_extract.requested"
 
 
-@pytest.mark.parametrize("job_kind", [JobKind.SOURCE_EXTRACT, JobKind.SOURCE_INDEX, "unknown"])
+@pytest.mark.parametrize("job_kind", [JobKind.SOURCE_INDEX, "unknown"])
 def test_requested_event_type_fails_closed(job_kind: JobKind | str) -> None:
     with pytest.raises(UnsupportedJobKindError):
         requested_event_type(job_kind)

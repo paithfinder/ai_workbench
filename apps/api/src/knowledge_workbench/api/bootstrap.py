@@ -24,8 +24,8 @@ class KnowledgeSpaceResponse(BaseModel):
 
 class CapabilityResponse(BaseModel):
     source_import: bool = True
-    extraction_review: bool = False
-    knowledge_tree: bool = False
+    extraction_review: bool = True
+    knowledge_tree: bool = True
     trusted_qa: bool = False
     spaced_review: bool = False
     evidence_agent: bool = False

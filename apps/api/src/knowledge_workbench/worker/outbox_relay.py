@@ -21,6 +21,8 @@ class TaskPublisher(Protocol):
 
     def publish_source_parse(self, payload: Mapping[str, object]) -> None: ...
 
+    def publish_source_extract(self, payload: Mapping[str, object]) -> None: ...
+
     async def cleanup_staging(self, storage_key: str) -> None: ...
 
 
@@ -44,6 +46,15 @@ class CeleryTaskPublisher:
             "knowledge_workbench.source_parse",
             kwargs=dict(payload),
             queue="source-parse",
+        )
+
+    def publish_source_extract(self, payload: Mapping[str, object]) -> None:
+        from knowledge_workbench.worker.celery_app import celery_app
+
+        celery_app.send_task(
+            "knowledge_workbench.source_extract",
+            kwargs=dict(payload),
+            queue="source-extract",
         )
 
     async def cleanup_staging(self, storage_key: str) -> None:
@@ -74,6 +85,8 @@ async def relay_batch(
                 publisher.publish_source_ingest(event.payload)
             elif event.event_type == "job.source_parse.requested":
                 publisher.publish_source_parse(event.payload)
+            elif event.event_type == "job.source_extract.requested":
+                publisher.publish_source_extract(event.payload)
             elif event.event_type == "storage.staging_cleanup.requested":
                 storage_key = event.payload.get("storage_key")
                 if not isinstance(storage_key, str):

@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from knowledge_workbench.config import Settings
 from knowledge_workbench.db.models import (
+    ExtractionJob,
+    ExtractionStatus,
     Job,
     JobAttempt,
     JobAttemptStatus,
@@ -28,11 +30,16 @@ from knowledge_workbench.db.models import (
 from knowledge_workbench.db.session import create_engine, create_session_factory
 
 MAX_AUTOMATIC_ATTEMPTS = 8
-RELIABLE_JOB_KINDS = (JobKind.SOURCE_INGEST, JobKind.SOURCE_PARSE)
+RELIABLE_JOB_KINDS = (
+    JobKind.SOURCE_INGEST,
+    JobKind.SOURCE_PARSE,
+    JobKind.SOURCE_EXTRACT,
+)
 
 _REQUESTED_EVENT_TYPES = {
     JobKind.SOURCE_INGEST: "job.source_ingest.requested",
     JobKind.SOURCE_PARSE: "job.source_parse.requested",
+    JobKind.SOURCE_EXTRACT: "job.source_extract.requested",
 }
 
 
@@ -643,3 +650,12 @@ async def _set_kind_failure_state(
             artifact.error_code = job.error_code
             artifact.error_message = job.error_message
             artifact.completed_at = now
+    elif job.kind == JobKind.SOURCE_EXTRACT.value:
+        extraction = await session.scalar(
+            select(ExtractionJob).where(ExtractionJob.job_id == job.id)
+        )
+        if extraction is not None:
+            extraction.status = ExtractionStatus.FAILED.value
+            extraction.error_code = job.error_code
+            extraction.error_message = job.error_message
+            extraction.completed_at = now

@@ -10,8 +10,11 @@ from redis.asyncio import Redis
 
 from knowledge_workbench.api import (
     bootstrap,
+    candidate_review,
+    extraction,
     health,
     jobs,
+    knowledge_tree,
     non_file_sources,
     source_parsing,
     sources,
@@ -24,7 +27,6 @@ from knowledge_workbench.core.middleware import (
     request_id_middleware,
 )
 from knowledge_workbench.db.session import create_engine, create_session_factory
-from knowledge_workbench.infrastructure.ai.fake import FakeAIGateway
 from knowledge_workbench.infrastructure.storage.minio import MinioObjectStorage
 
 
@@ -42,7 +44,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title="Zixu Knowledge Workbench API",
         version=resolved_settings.app_version,
         description=(
-            "D3 immutable source ingestion and parsing API for the personal knowledge workbench."
+            "D5 immutable source ingestion, parsing, structured AI extraction, and "
+            "human candidate review API for the personal knowledge workbench."
         ),
         lifespan=lifespan,
     )
@@ -68,7 +71,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         resolved_settings.s3_bucket,
         resolved_settings.s3_public_endpoint,
     )
-    app.state.ai_gateway = FakeAIGateway()
     app.middleware("http")(
         pasted_text_body_limit_middleware(
             resolved_settings.max_pasted_text_size_bytes
@@ -89,6 +91,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sources.router)
     app.include_router(non_file_sources.router)
     app.include_router(source_parsing.router)
+    app.include_router(extraction.router)
+    app.include_router(candidate_review.router)
+    app.include_router(knowledge_tree.router)
     app.include_router(jobs.router)
     return app
 

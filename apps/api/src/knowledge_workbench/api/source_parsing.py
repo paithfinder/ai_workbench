@@ -80,6 +80,7 @@ class SectionResponse(BaseModel):
 
 class SectionsResponse(BaseModel):
     items: list[SectionResponse]
+    previous_cursor: str | None
     next_cursor: str | None
     artifact: ParseArtifactResponse
 
@@ -166,6 +167,8 @@ async def list_sections(
     settings: SettingsDependency,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     cursor: Annotated[str | None, Query()] = None,
+    artifact_id: Annotated[UUID | None, Query()] = None,
+    anchor_section_id: Annotated[UUID | None, Query()] = None,
 ) -> SectionsResponse:
     page = await SourceParsingService(settings).list_sections(
         session,
@@ -174,9 +177,12 @@ async def list_sections(
         version_id=version_id,
         limit=limit,
         cursor=cursor,
+        artifact_id=artifact_id,
+        anchor_section_id=anchor_section_id,
     )
     return SectionsResponse(
         items=[_section_response(item, page.artifact.revision) for item in page.items],
+        previous_cursor=page.previous_cursor,
         next_cursor=page.next_cursor,
         artifact=_artifact_response(page.artifact),
     )

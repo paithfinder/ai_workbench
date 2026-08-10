@@ -61,8 +61,11 @@ class Settings(BaseSettings):
     outbox_relay_interval_seconds: float = Field(default=1.0, gt=0)
     outbox_batch_size: int = Field(default=50, gt=0, le=500)
 
-    ai_provider: Literal["fake"] = "fake"
+    ai_provider: Literal["fake", "anthropic"] = "fake"
     claude_model: str = Field(default="claude-opus-5", min_length=1)
+    ai_timeout_seconds: float = Field(default=120.0, gt=0, le=600)
+    extraction_max_output_tokens: int = Field(default=16000, gt=0, le=16000)
+    extraction_batch_max_characters: int = Field(default=24000, gt=1000, le=100000)
 
     @model_validator(mode="after")
     def build_database_url_from_components(self) -> Settings:

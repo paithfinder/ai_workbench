@@ -18,8 +18,8 @@ def test_bootstrap_reads_seeded_default_space_and_real_zero_counts() -> None:
         },
         "capabilities": {
             "source_import": True,
-            "extraction_review": False,
-            "knowledge_tree": False,
+            "extraction_review": True,
+            "knowledge_tree": True,
             "trusted_qa": False,
             "spaced_review": False,
             "evidence_agent": False,

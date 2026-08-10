@@ -8,6 +8,8 @@ import pytest
 from knowledge_workbench.application.jobs import JobService
 from knowledge_workbench.core.errors import AppError
 from knowledge_workbench.db.models import (
+    ExtractionJob,
+    ExtractionStatus,
     Job,
     JobRetryRequest,
     JobStatus,
@@ -139,9 +141,42 @@ async def test_parse_retry_resets_failed_revision_and_uses_parse_event() -> None
     assert event.event_type == "job.source_parse.requested"
 
 
-async def test_retry_fails_closed_for_job_without_worker_route() -> None:
+async def test_extract_retry_resets_extraction_and_uses_extract_event() -> None:
     job = _failed_job()
     job.kind = "source_extract"
+    job.source_version_id = uuid4()
+    extraction = ExtractionJob(
+        id=uuid4(),
+        job_id=job.id,
+        space_id=job.space_id,
+        source_version_id=job.source_version_id,
+        parse_artifact_id=uuid4(),
+        status=ExtractionStatus.FAILED.value,
+        model="claude-opus-5",
+        prompt_version="knowledge-candidates-v1",
+        error_code="automatic_attempts_exhausted",
+        error_message="temporary failure",
+    )
+    session = FakeSession(job, None, extraction)
+
+    await JobService().retry_job(
+        session,  # type: ignore[arg-type]
+        space_id=job.space_id,
+        job_id=job.id,
+        idempotency_key="retry-extract",
+    )
+
+    assert extraction.status == ExtractionStatus.QUEUED.value
+    assert extraction.error_code is None
+    assert extraction.error_message is None
+    event = session.added[1]
+    assert isinstance(event, OutboxEvent)
+    assert event.event_type == "job.source_extract.requested"
+
+
+async def test_retry_fails_closed_for_job_without_worker_route() -> None:
+    job = _failed_job()
+    job.kind = "source_index"
     session = FakeSession(job, None)
 
     with pytest.raises(AppError) as error:
@@ -149,7 +184,7 @@ async def test_retry_fails_closed_for_job_without_worker_route() -> None:
             session,  # type: ignore[arg-type]
             space_id=job.space_id,
             job_id=job.id,
-            idempotency_key="retry-extract",
+            idempotency_key="retry-index",
         )
 
     assert error.value.code == "job_kind_not_retryable"
