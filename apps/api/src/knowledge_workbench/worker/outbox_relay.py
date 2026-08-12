@@ -23,6 +23,8 @@ class TaskPublisher(Protocol):
 
     def publish_source_extract(self, payload: Mapping[str, object]) -> None: ...
 
+    def publish_source_index(self, payload: Mapping[str, object]) -> None: ...
+
     async def cleanup_staging(self, storage_key: str) -> None: ...
 
 
@@ -57,6 +59,15 @@ class CeleryTaskPublisher:
             queue="source-extract",
         )
 
+    def publish_source_index(self, payload: Mapping[str, object]) -> None:
+        from knowledge_workbench.worker.celery_app import celery_app
+
+        celery_app.send_task(
+            "knowledge_workbench.source_index",
+            kwargs=dict(payload),
+            queue="source-index",
+        )
+
     async def cleanup_staging(self, storage_key: str) -> None:
         if self._storage is None:
             raise RuntimeError("Object storage was not configured for cleanup")
@@ -87,6 +98,8 @@ async def relay_batch(
                 publisher.publish_source_parse(event.payload)
             elif event.event_type == "job.source_extract.requested":
                 publisher.publish_source_extract(event.payload)
+            elif event.event_type == "job.source_index.requested":
+                publisher.publish_source_index(event.payload)
             elif event.event_type == "storage.staging_cleanup.requested":
                 storage_key = event.payload.get("storage_key")
                 if not isinstance(storage_key, str):

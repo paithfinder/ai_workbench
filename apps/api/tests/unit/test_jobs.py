@@ -16,6 +16,7 @@ from knowledge_workbench.db.models import (
     OutboxEvent,
     ParseArtifactStatus,
     ParseStatus,
+    RetrievalIndexRun,
     SourceParseArtifact,
     SourceVersion,
 )
@@ -174,10 +175,47 @@ async def test_extract_retry_resets_extraction_and_uses_extract_event() -> None:
     assert event.event_type == "job.source_extract.requested"
 
 
-async def test_retry_fails_closed_for_job_without_worker_route() -> None:
+async def test_index_retry_resets_run_and_uses_index_event() -> None:
     job = _failed_job()
     job.kind = "source_index"
-    session = FakeSession(job, None)
+    run = RetrievalIndexRun(
+        id=uuid4(),
+        job_id=job.id,
+        space_id=job.space_id,
+        target_kind="knowledge_revision",
+        target_id=uuid4(),
+        input_hash="a" * 64,
+        status="failed",
+        index_config_version="d7-v1",
+        chunker_version="d7-structured-v1",
+        embedding_provider="fake",
+        embedding_model="fake-bge-m3",
+        embedding_config={"dimensions": 1024},
+        embedding_dimensions=1024,
+        error_code="embedding_unavailable",
+        error_message="temporary failure",
+    )
+    session = FakeSession(job, None, run)
+
+    await JobService().retry_job(
+        session,  # type: ignore[arg-type]
+        space_id=job.space_id,
+        job_id=job.id,
+        idempotency_key="retry-index",
+    )
+
+    assert run.status == "queued"
+    assert run.error_code is None
+    assert run.error_message is None
+    event = session.added[1]
+    assert isinstance(event, OutboxEvent)
+    assert event.event_type == "job.source_index.requested"
+
+
+async def test_index_retry_fails_closed_without_index_run() -> None:
+    job = _failed_job()
+    job.kind = "source_index"
+    session = FakeSession(job, None, None)
 
     with pytest.raises(AppError) as error:
         await JobService().retry_job(
@@ -187,6 +225,5 @@ async def test_retry_fails_closed_for_job_without_worker_route() -> None:
             idempotency_key="retry-index",
         )
 
-    assert error.value.code == "job_kind_not_retryable"
-    assert job.status == JobStatus.FAILED.value
+    assert error.value.code == "index_job_inconsistent"
     assert session.added == []

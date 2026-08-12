@@ -10,6 +10,8 @@ __pycache__/
 .ruff_cache/
 .venv/
 .env
+/evals/fixture-map.local.json
+/evals/retrieval-report.json
 *.log
 .DS_Store
 .idea/

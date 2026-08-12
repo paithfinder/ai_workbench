@@ -31,6 +31,7 @@ import {
   type KnowledgeSearchItem,
   type MutableKnowledgeNodeKind,
 } from "@/lib/knowledge";
+import { KnowledgeFolderImportDialog } from "./knowledge-folder-import-dialog";
 import { PageHeader } from "./page-states";
 
 type DialogMode = "folder" | "document" | "edit" | "delete" | null;
@@ -254,6 +255,8 @@ export function KnowledgeWorkspace() {
   const [focusedId, setFocusedId] = useState<string | null>(initialSelectedId);
   const [citationOpener, setCitationOpener] = useState<HTMLElement | null>(null);
   const [dialog, setDialog] = useState<DialogMode>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importOpener, setImportOpener] = useState<HTMLElement | null>(null);
   const [dialogOpener, setDialogOpener] = useState<HTMLElement | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -491,6 +494,28 @@ export function KnowledgeWorkspace() {
     updateUrl(selectedId, id);
   }
 
+  async function completeFolderImport(rootNodeId: string, summary: { folder_count: number; document_count: number }) {
+    if (!spaceId) return;
+    setImportOpen(false);
+    const targetId = creationParent(nodes, selected)?.id;
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (targetId) next.delete(targetId);
+      return next;
+    });
+    setExpanded((current) => new Set([
+      ...current,
+      ...ancestorIds(nodes, targetId ?? ""),
+      ...(targetId ? [targetId] : []),
+      rootNodeId,
+    ]));
+    pendingTreeFocusRef.current = rootNodeId;
+    updateUrl(rootNodeId);
+    setFocusedId(rootNodeId);
+    setNotice({ kind: "success", message: `已直接导入 ${summary.folder_count} 个文件夹和 ${summary.document_count} 篇文档；未调用 AI。` });
+    await queryClient.invalidateQueries({ queryKey: ["knowledge-tree", spaceId] });
+  }
+
   const pageHeader = (description: string) => <PageHeader eyebrow="KNOWLEDGE TREE · D6" headingId="knowledge-title" title="我的知识树" description={description} />;
   if (bootstrapQuery.isPending || treeQuery.isPending) return <section aria-live="polite">{pageHeader("正在读取稳定层级与冻结证据…")}<div className="panel-card loading-panel">正在装订知识目录…</div></section>;
   if (bootstrapQuery.isError || treeQuery.isError || !spaceId) return <section>{pageHeader("知识树只显示服务端保存的真实节点。")}<div className="state-card error-state" role="alert"><div><h2>无法读取知识树</h2><p>{errorMessage(bootstrapQuery.error ?? treeQuery.error)}</p></div><button className="button primary" onClick={() => { void bootstrapQuery.refetch(); void treeQuery.refetch(); }} type="button">重新加载</button></div></section>;
@@ -502,6 +527,7 @@ export function KnowledgeWorkspace() {
   const moveTargets = selected?.kind === "point" ? nodes.filter((node) => node.kind === "document" && node.id !== selected.id) : nodes.filter((node) => (node.kind === "root" || node.kind === "folder") && node.id !== selected?.id && !ancestorIds(nodes, node.id).includes(selected?.id ?? ""));
   const selectedParent = nodes.find((node) => node.id === selected?.parent_id);
   const moveValue = selectedParent?.kind === "root" ? "" : selected?.parent_id ?? "";
+  const importParent = creationParent(nodes, selected);
 
   return <section aria-labelledby="knowledge-title">
     {pageHeader("浏览人工确认的知识层级；每条引用都回到保存时的原始分段。")}
@@ -510,6 +536,7 @@ export function KnowledgeWorkspace() {
         {query.trim() ? <div className="knowledge-search-results" id="knowledge-search-results"><p aria-live="polite">{searchQuery.isPending ? "正在搜索…" : `${searchResults.length} 个结果`}</p>{searchQuery.isError ? <p className="inline-error" role="alert">{errorMessage(searchQuery.error)}</p> : <ul>{searchResults.map((result, index) => <li key={result.node.id}><button onClick={() => selectSearchResult(result)} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setQuery(""); setSearchTerm(""); searchRef.current?.focus(); } else if (event.key === "ArrowDown") { event.preventDefault(); (event.currentTarget.closest("li")?.nextElementSibling?.querySelector("button") as HTMLElement | null)?.focus(); } else if (event.key === "ArrowUp") { event.preventDefault(); const previous = event.currentTarget.closest("li")?.previousElementSibling?.querySelector("button") as HTMLElement | null; if (previous) previous.focus(); else searchRef.current?.focus(); } else if (event.key === "Home") { event.preventDefault(); (event.currentTarget.closest("ul")?.querySelector("button") as HTMLElement | null)?.focus(); } else if (event.key === "End") { event.preventDefault(); (event.currentTarget.closest("ul")?.lastElementChild?.querySelector("button") as HTMLElement | null)?.focus(); } else if (event.key === "Enter") { event.preventDefault(); selectSearchResult(result); } }} type="button"><span>{kindLabels[result.node.kind]}</span><strong>{result.node.title ?? kindLabels[result.node.kind]}</strong><small>{result.breadcrumb}</small><i aria-hidden="true">{String(index + 1).padStart(2, "0")}</i></button></li>)}</ul>}</div> : null}
       </div>
       <span className="knowledge-count">{nodes.length} 个节点</span>
+      {bootstrapQuery.data.capabilities.knowledge_folder_import ? <button className="button" disabled={!importParent || busy} onClick={(event) => { setImportOpener(event.currentTarget); setImportOpen(true); }} type="button">导入文件夹</button> : null}
       <button className="button" onClick={(event) => openDialog(event, "folder")} type="button">新建文件夹</button><button className="button primary" onClick={(event) => openDialog(event, "document")} type="button">新建文档</button>
     </div>
     <div aria-atomic="true" aria-live="polite" className={`knowledge-notice ${notice ? `is-${notice.kind}` : ""}`} role={notice?.kind === "error" ? "alert" : "status"}>{notice?.message ?? ""}</div>
@@ -518,6 +545,7 @@ export function KnowledgeWorkspace() {
       <main className="knowledge-detail-panel">{!selectedId ? <div className="knowledge-blank"><span aria-hidden="true">序</span><h2>选择一条知识</h2><p>方向键只移动目录焦点；按 Enter 或点击后，详情才会切换。</p></div> : detailQuery.isPending ? <p aria-live="polite" className="muted-message">正在读取节点详情…</p> : detailQuery.isError || !detailQuery.data ? <div className="inline-error" role="alert">{errorMessage(detailQuery.error)}<button className="text-button" onClick={() => detailQuery.refetch()} type="button">重试</button></div> : <article className="knowledge-document"><header><div><p className="state-kicker">{kindLabels[detailQuery.data.node.kind].toUpperCase()} · VERSION {detailQuery.data.node.version}</p><h2>{detailQuery.data.revision?.title ?? detailQuery.data.node.title ?? kindLabels[detailQuery.data.node.kind]}</h2><p>{nodePathLabel(nodes, detailQuery.data.node)}</p></div><span className={`detail-kind kind-${detailQuery.data.node.kind}`}>{kindMarks[detailQuery.data.node.kind]}</span></header>{detailQuery.data.revision ? <><div className="knowledge-body">{detailQuery.data.revision.body || "这个节点还没有正文。"}</div>{detailQuery.data.revision.tags.length ? <ul className="knowledge-tags" aria-label="知识标签">{detailQuery.data.revision.tags.map((tag) => <li key={tag}>{tag}</li>)}</ul> : null}</> : <div className="knowledge-folder-note">{detailQuery.data.node.kind === "source" ? "来源节点只记录不可变来源版本，不承载可编辑正文。" : "此节点不承载正文。可在这里继续组织下级知识。"}</div>}<section aria-labelledby="citations-title" className="knowledge-citations"><div><p className="state-kicker">EVIDENCE · 冻结引用</p><h3 id="citations-title">来源证据</h3></div>{detailQuery.data.evidence.length ? <ul>{detailQuery.data.evidence.map((item, index) => <li key={item.id}><button onClick={(event) => openEvidence(event, item.id)} type="button"><span>{String(index + 1).padStart(2, "0")}</span><strong>{item.frozen_quote || "查看冻结证据"}</strong><small>Revision {item.revision_number} · {item.section_id}</small></button></li>)}</ul> : <p className="muted-message">当前修订没有来源证据。</p>}</section>{moveOrDeleteAllowed ? <footer className="knowledge-detail-actions">{appendRevisionAllowed ? <button className="button primary" onClick={(event) => openDialog(event, "edit")} type="button">编辑并新建修订</button> : null}<label><span>移动到</span><select aria-label="移动到" disabled={busy} onChange={(event) => { if (event.target.value !== moveValue) void move(event.target.value); }} value={moveValue}>{moveTargets.map((node) => <option key={node.id} value={node.kind === "root" ? "" : node.id}>{nodePathLabel(nodes, node)}</option>)}</select></label><button className="button danger" onClick={(event) => openDialog(event, "delete")} type="button">移到回收站</button></footer> : null}</article>}</main>
     </div>
     {evidenceId ? <CitationDrawer evidence={evidenceMatchesSelection ? evidenceQuery.data : undefined} loading={evidenceQuery.isPending || detailQuery.isPending} onClose={closeCitation} opener={citationOpener} /> : null}
+    {importOpen && importParent ? <KnowledgeFolderImportDialog limits={bootstrapQuery.data.limits.knowledge_import} onClose={() => setImportOpen(false)} onSuccess={async (result) => completeFolderImport(result.root_node_id, result.summary)} opener={importOpener} parent={importParent} parentLabel={nodePathLabel(nodes, importParent)} spaceId={spaceId} /> : null}
     {dialog ? <KnowledgeDialog busy={busy} detail={detailQuery.data} mode={dialog} onClose={closeDialog} onSubmit={mutate} opener={dialogOpener} selected={selected} /> : null}
   </section>;
 }

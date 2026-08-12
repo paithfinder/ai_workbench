@@ -14,8 +14,10 @@ from knowledge_workbench.api import (
     extraction,
     health,
     jobs,
+    knowledge_import,
     knowledge_tree,
     non_file_sources,
+    retrieval,
     source_parsing,
     sources,
 )
@@ -23,6 +25,7 @@ from knowledge_workbench.config import Settings, get_settings
 from knowledge_workbench.core.errors import install_error_handlers
 from knowledge_workbench.core.logging import configure_logging
 from knowledge_workbench.core.middleware import (
+    knowledge_import_body_limit_middleware,
     pasted_text_body_limit_middleware,
     request_id_middleware,
 )
@@ -72,8 +75,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         resolved_settings.s3_public_endpoint,
     )
     app.middleware("http")(
-        pasted_text_body_limit_middleware(
-            resolved_settings.max_pasted_text_size_bytes
+        pasted_text_body_limit_middleware(resolved_settings.max_pasted_text_size_bytes)
+    )
+    app.middleware("http")(
+        knowledge_import_body_limit_middleware(
+            resolved_settings.knowledge_import_max_request_bytes
         )
     )
     app.middleware("http")(request_id_middleware)
@@ -94,6 +100,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(extraction.router)
     app.include_router(candidate_review.router)
     app.include_router(knowledge_tree.router)
+    app.include_router(knowledge_import.router)
+    app.include_router(retrieval.router)
     app.include_router(jobs.router)
     return app
 

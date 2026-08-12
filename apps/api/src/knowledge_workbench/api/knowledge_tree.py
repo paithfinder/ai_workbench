@@ -7,7 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, Header, Query, status
 from pydantic import BaseModel
 
-from knowledge_workbench.api.dependencies import SessionDependency
+from knowledge_workbench.api.dependencies import SessionDependency, SettingsDependency
+from knowledge_workbench.application.indexing import IndexingService
 from knowledge_workbench.application.knowledge_tree import (
     KnowledgeEvidenceRecord,
     KnowledgeNodeCreate,
@@ -273,6 +274,7 @@ async def create_knowledge_node(
     request: KnowledgeNodeCreate,
     idempotency_key: IdempotencyKey,
     session: SessionDependency,
+    settings: SettingsDependency,
 ) -> KnowledgeWriteResponse:
     async with session.begin():
         outcome = await KnowledgeTreeService().create(
@@ -281,6 +283,15 @@ async def create_knowledge_node(
             idempotency_key=idempotency_key,
             request=request,
         )
+        revision = outcome.snapshot.get("revision")
+        if isinstance(revision, dict) and isinstance(revision.get("id"), str):
+            await IndexingService().request_knowledge_rebuild(
+                session,
+                settings=settings,
+                space_id=space_id,
+                revision_id=UUID(revision["id"]),
+                idempotency_key=f"knowledge-create:{outcome.result_id}",
+            )
     return _write_response(outcome)
 
 
@@ -296,6 +307,7 @@ async def edit_knowledge_node(
     request: KnowledgeNodeEdit,
     idempotency_key: IdempotencyKey,
     session: SessionDependency,
+    settings: SettingsDependency,
 ) -> KnowledgeWriteResponse:
     async with session.begin():
         outcome = await KnowledgeTreeService().edit(
@@ -305,6 +317,15 @@ async def edit_knowledge_node(
             idempotency_key=idempotency_key,
             request=request,
         )
+        revision = outcome.snapshot.get("revision")
+        if isinstance(revision, dict) and isinstance(revision.get("id"), str):
+            await IndexingService().request_knowledge_rebuild(
+                session,
+                settings=settings,
+                space_id=space_id,
+                revision_id=UUID(revision["id"]),
+                idempotency_key=f"knowledge-edit:{outcome.result_id}",
+            )
     return _write_response(outcome)
 
 

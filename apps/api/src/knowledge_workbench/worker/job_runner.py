@@ -22,6 +22,7 @@ from knowledge_workbench.db.models import (
     ParseArtifactStatus,
     ParseStatus,
     ProcessingStatus,
+    RetrievalIndexRun,
     Source,
     SourceParseArtifact,
     SourceStatus,
@@ -34,12 +35,14 @@ RELIABLE_JOB_KINDS = (
     JobKind.SOURCE_INGEST,
     JobKind.SOURCE_PARSE,
     JobKind.SOURCE_EXTRACT,
+    JobKind.SOURCE_INDEX,
 )
 
 _REQUESTED_EVENT_TYPES = {
     JobKind.SOURCE_INGEST: "job.source_ingest.requested",
     JobKind.SOURCE_PARSE: "job.source_parse.requested",
     JobKind.SOURCE_EXTRACT: "job.source_extract.requested",
+    JobKind.SOURCE_INDEX: "job.source_index.requested",
 }
 
 
@@ -135,9 +138,7 @@ class JobRunner:
             await session.rollback()
             raise
 
-    async def _run_claimed(
-        self, session: AsyncSession, *, job_id: UUID, token: ClaimToken
-    ) -> None:
+    async def _run_claimed(self, session: AsyncSession, *, job_id: UUID, token: ClaimToken) -> None:
         if not await self._heartbeat(session, job_id=job_id, token=token):
             return
         await self._complete(session, job_id=job_id, token=token)
@@ -209,8 +210,7 @@ class JobRunner:
                     worker_name=worker_name,
                     started_at=now,
                     heartbeat_at=now,
-                    lease_expires_at=now
-                    + timedelta(seconds=self._lease_seconds()),
+                    lease_expires_at=now + timedelta(seconds=self._lease_seconds()),
                 )
             )
             await session.flush()
@@ -252,9 +252,7 @@ class JobRunner:
             await session.flush()
             return True
 
-    async def _complete(
-        self, session: AsyncSession, *, job_id: UUID, token: ClaimToken
-    ) -> None:
+    async def _complete(self, session: AsyncSession, *, job_id: UUID, token: ClaimToken) -> None:
         raise NotImplementedError
 
     async def _mark_failed(
@@ -423,8 +421,7 @@ async def recover_expired_leases(
                 event_type=event_type,
                 deduplication_key=f"lease-recovery:{attempt.id}",
                 payload={"job_id": str(job.id), "space_id": str(job.space_id)},
-                available_at=now
-                + timedelta(seconds=min(300, 2 ** min(job.attempt_count, 8))),
+                available_at=now + timedelta(seconds=min(300, 2 ** min(job.attempt_count, 8))),
             )
         )
         recovered += 1
@@ -585,9 +582,7 @@ def _validated_kinds(job_kinds: Collection[JobKind]) -> tuple[JobKind, ...]:
     return kinds
 
 
-def _set_job_failed(
-    job: Job, *, code: str, message: str, retryable: bool, now: datetime
-) -> None:
+def _set_job_failed(job: Job, *, code: str, message: str, retryable: bool, now: datetime) -> None:
     job.status = JobStatus.FAILED.value
     job.progress = 0
     job.retryable = retryable
@@ -650,6 +645,15 @@ async def _set_kind_failure_state(
             artifact.error_code = job.error_code
             artifact.error_message = job.error_message
             artifact.completed_at = now
+    elif job.kind == JobKind.SOURCE_INDEX.value:
+        index_run = await session.scalar(
+            select(RetrievalIndexRun).where(RetrievalIndexRun.job_id == job.id)
+        )
+        if index_run is not None:
+            index_run.status = "failed"
+            index_run.error_code = job.error_code
+            index_run.error_message = job.error_message
+            index_run.completed_at = now
     elif job.kind == JobKind.SOURCE_EXTRACT.value:
         extraction = await session.scalar(
             select(ExtractionJob).where(ExtractionJob.job_id == job.id)

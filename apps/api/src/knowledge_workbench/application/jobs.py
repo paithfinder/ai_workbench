@@ -18,6 +18,7 @@ from knowledge_workbench.db.models import (
     OutboxEvent,
     ParseArtifactStatus,
     ParseStatus,
+    RetrievalIndexRun,
     SourceParseArtifact,
     SourceVersion,
 )
@@ -28,12 +29,8 @@ from knowledge_workbench.worker.job_runner import (
 
 
 class JobService:
-    async def get_job(
-        self, session: AsyncSession, *, space_id: UUID, job_id: UUID
-    ) -> Job:
-        job = await session.scalar(
-            select(Job).where(Job.id == job_id, Job.space_id == space_id)
-        )
+    async def get_job(self, session: AsyncSession, *, space_id: UUID, job_id: UUID) -> Job:
+        job = await session.scalar(select(Job).where(Job.id == job_id, Job.space_id == space_id))
         if job is None:
             raise AppError("job_not_found", "Job was not found.", status_code=404)
         return job
@@ -48,9 +45,7 @@ class JobService:
     ) -> Job:
         key = _validate_idempotency_key(idempotency_key)
         job = await session.scalar(
-            select(Job)
-            .where(Job.id == job_id, Job.space_id == space_id)
-            .with_for_update()
+            select(Job).where(Job.id == job_id, Job.space_id == space_id).with_for_update()
         )
         if job is None:
             raise AppError("job_not_found", "Job was not found.", status_code=404)
@@ -121,9 +116,7 @@ class JobService:
             version.parse_status = ParseStatus.QUEUED.value
         elif job_kind == JobKind.SOURCE_EXTRACT:
             extraction = await session.scalar(
-                select(ExtractionJob)
-                .where(ExtractionJob.job_id == job.id)
-                .with_for_update()
+                select(ExtractionJob).where(ExtractionJob.job_id == job.id).with_for_update()
             )
             if extraction is None:
                 raise AppError(
@@ -136,6 +129,23 @@ class JobService:
             extraction.error_message = None
             extraction.started_at = None
             extraction.completed_at = None
+        elif job_kind == JobKind.SOURCE_INDEX:
+            index_run = await session.scalar(
+                select(RetrievalIndexRun)
+                .where(RetrievalIndexRun.job_id == job.id)
+                .with_for_update()
+            )
+            if index_run is None:
+                raise AppError(
+                    "index_job_inconsistent",
+                    "The failed index run is unavailable.",
+                    status_code=500,
+                )
+            index_run.status = "queued"
+            index_run.error_code = None
+            index_run.error_message = None
+            index_run.started_at = None
+            index_run.completed_at = None
         next_attempt = job.attempt_count + 1
         request_id = uuid4()
         session.add(

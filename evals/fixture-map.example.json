@@ -1,0 +1,17 @@
+{
+  "_comment": "Copy to a local untracked file and replace every value with the real IDs/identities created by the D7 fixture import. A real baseline requires a complete mapping for all dataset keys.",
+  "mappings": {
+    "scope_node_ids": {
+      "knowledge-governance": "<real-node-uuid>",
+      "engineering": "<real-node-uuid>"
+    },
+    "content_identities": {
+      "knowledge-governance:review": "<real-content-identity-or-uuid>",
+      "knowledge-governance:author-review": "<real-content-identity-or-uuid>",
+      "outside-knowledge-governance:rag-zh-001": "<real-content-identity-or-uuid>"
+    },
+    "section_ids": {
+      "section-001": "<real-section-uuid>"
+    }
+  }
+}

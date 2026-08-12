@@ -5,9 +5,11 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     Float,
     ForeignKey,
@@ -19,7 +21,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy import text as sql_text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -116,6 +118,18 @@ class KnowledgeNodeKind(StrEnum):
 class CandidateAtomicity(StrEnum):
     ATOMIC = "atomic"
     NEEDS_SPLIT = "needs_split"
+
+
+class IndexRunStatus(StrEnum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    READY = "ready"
+    FAILED = "failed"
+
+
+class CorpusKind(StrEnum):
+    CONFIRMED_KNOWLEDGE = "confirmed_knowledge"
+    SOURCE_EVIDENCE = "source_evidence"
 
 
 class JobAttemptStatus(StrEnum):
@@ -322,9 +336,7 @@ class SourceVersion(Base):
 class SourceParseArtifact(Base):
     __tablename__ = "source_parse_artifacts"
     __table_args__ = (
-        UniqueConstraint(
-            "id", "source_version_id", name="uq_source_parse_artifacts_id_version"
-        ),
+        UniqueConstraint("id", "source_version_id", name="uq_source_parse_artifacts_id_version"),
         UniqueConstraint(
             "source_version_id", "revision", name="uq_source_parse_artifacts_revision"
         ),
@@ -334,8 +346,7 @@ class SourceParseArtifact(Base):
             name="ck_source_parse_artifacts_status",
         ),
         CheckConstraint(
-            "canonical_content_sha256 IS NULL OR "
-            "canonical_content_sha256 ~ '^[0-9a-f]{64}$'",
+            "canonical_content_sha256 IS NULL OR canonical_content_sha256 ~ '^[0-9a-f]{64}$'",
             name="ck_source_parse_artifacts_canonical_sha256",
         ),
         CheckConstraint(
@@ -393,6 +404,12 @@ class SourceSection(Base):
             ["source_parse_artifacts.id", "source_parse_artifacts.source_version_id"],
             name="fk_source_sections_artifact_version",
             ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "id",
+            "parse_artifact_id",
+            "source_version_id",
+            name="uq_source_sections_id_artifact_version",
         ),
         UniqueConstraint("parse_artifact_id", "ordinal", name="uq_source_sections_ordinal"),
         UniqueConstraint("parse_artifact_id", "block_id", name="uq_source_sections_block"),
@@ -505,9 +522,7 @@ class ExtractionJob(Base):
         ForeignKey("source_parse_artifacts.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default=ExtractionStatus.QUEUED
-    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default=ExtractionStatus.QUEUED)
     provider: Mapped[str | None] = mapped_column(String(100))
     model: Mapped[str] = mapped_column(String(200), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -726,9 +741,7 @@ class KnowledgeRevision(Base):
             "content_hash ~ '^[0-9a-f]{64}$'",
             name="ck_knowledge_revisions_content_hash",
         ),
-        CheckConstraint(
-            "revision_number > 0", name="ck_knowledge_revisions_number_positive"
-        ),
+        CheckConstraint("revision_number > 0", name="ck_knowledge_revisions_number_positive"),
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -764,9 +777,7 @@ class KnowledgeEvidence(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("revision_id", "section_id", name="uq_knowledge_evidence_section"),
-        CheckConstraint(
-            "quote_hash ~ '^[0-9a-f]{64}$'", name="ck_knowledge_evidence_quote_hash"
-        ),
+        CheckConstraint("quote_hash ~ '^[0-9a-f]{64}$'", name="ck_knowledge_evidence_quote_hash"),
         CheckConstraint(
             "content_hash ~ '^[0-9a-f]{64}$'", name="ck_knowledge_evidence_content_hash"
         ),
@@ -795,6 +806,82 @@ class KnowledgeEvidence(Base):
     )
 
 
+class KnowledgeImportRequest(Base):
+    __tablename__ = "knowledge_import_requests"
+    __table_args__ = (
+        UniqueConstraint("space_id", "idempotency_key", name="uq_knowledge_import_requests_key"),
+        UniqueConstraint("root_node_id", name="uq_knowledge_import_requests_root_node"),
+        CheckConstraint(
+            "request_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_knowledge_import_requests_hash",
+        ),
+        CheckConstraint("entry_count > 0", name="ck_knowledge_import_requests_entry_count"),
+        CheckConstraint("folder_count > 0", name="ck_knowledge_import_requests_folder_count"),
+        CheckConstraint("document_count > 0", name="ck_knowledge_import_requests_document_count"),
+        CheckConstraint(
+            "entry_count = folder_count + document_count",
+            name="ck_knowledge_import_requests_counts",
+        ),
+        CheckConstraint(
+            "total_body_utf8_bytes >= 0",
+            name="ck_knowledge_import_requests_body_bytes",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    root_node_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_nodes.id", ondelete="RESTRICT"), nullable=False
+    )
+    entry_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    folder_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    document_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_body_utf8_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class KnowledgeImportItem(Base):
+    __tablename__ = "knowledge_import_items"
+    __table_args__ = (
+        UniqueConstraint("request_id", "ordinal", name="uq_knowledge_import_items_ordinal"),
+        UniqueConstraint("request_id", "relative_path", name="uq_knowledge_import_items_path"),
+        UniqueConstraint("request_id", "node_id", name="uq_knowledge_import_items_node"),
+        CheckConstraint("ordinal >= 0", name="ck_knowledge_import_items_ordinal"),
+        CheckConstraint("kind IN ('folder','document')", name="ck_knowledge_import_items_kind"),
+        CheckConstraint("body_utf8_bytes >= 0", name="ck_knowledge_import_items_body_bytes"),
+        CheckConstraint("content_hash ~ '^[0-9a-f]{64}$'", name="ck_knowledge_import_items_hash"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    request_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("knowledge_import_requests.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    relative_path: Mapped[str] = mapped_column(String(4000), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    node_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_nodes.id", ondelete="RESTRICT"), nullable=False
+    )
+    revision_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("knowledge_revisions.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    body_utf8_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class KnowledgeWriteRequest(Base):
     __tablename__ = "knowledge_write_requests"
     __table_args__ = (
@@ -803,9 +890,7 @@ class KnowledgeWriteRequest(Base):
             "operation IN ('create','edit','move','delete')",
             name="ck_knowledge_write_requests_operation",
         ),
-        CheckConstraint(
-            "request_hash ~ '^[0-9a-f]{64}$'", name="ck_knowledge_write_requests_hash"
-        ),
+        CheckConstraint("request_hash ~ '^[0-9a-f]{64}$'", name="ck_knowledge_write_requests_hash"),
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
@@ -994,6 +1079,208 @@ class CandidateReviewResult(Base):
     )
 
 
+class RetrievalIndexRun(Base):
+    __tablename__ = "retrieval_index_runs"
+    __table_args__ = (
+        UniqueConstraint("job_id", name="uq_retrieval_index_runs_job"),
+        UniqueConstraint(
+            "space_id",
+            "target_kind",
+            "target_id",
+            "input_hash",
+            "index_config_version",
+            name="uq_retrieval_index_runs_target_config",
+        ),
+        CheckConstraint(
+            "status IN ('queued','running','ready','failed')",
+            name="ck_retrieval_index_runs_status",
+        ),
+        CheckConstraint(
+            "target_kind IN ('source_version','knowledge_revision','space_rebuild')",
+            name="ck_retrieval_index_runs_target_kind",
+        ),
+        CheckConstraint("input_hash ~ '^[0-9a-f]{64}$'", name="ck_retrieval_index_runs_hash"),
+        CheckConstraint("chunk_count >= 0", name="ck_retrieval_index_runs_chunk_count"),
+        CheckConstraint("embedded_count >= 0", name="ck_retrieval_index_runs_embedded_count"),
+        CheckConstraint("embedding_dimensions > 0", name="ck_retrieval_index_runs_dimensions"),
+        Index(
+            "uq_retrieval_index_runs_active_target",
+            "space_id",
+            "target_kind",
+            "target_id",
+            "index_config_version",
+            unique=True,
+            postgresql_where=sql_text("status IN ('queued','running')"),
+        ),
+        Index("ix_retrieval_index_runs_space_status", "space_id", "status", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    job_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("jobs.id", ondelete="RESTRICT"), nullable=False
+    )
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    target_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    target_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    scope_node_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_nodes.id", ondelete="RESTRICT")
+    )
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("source_versions.id", ondelete="CASCADE")
+    )
+    parse_artifact_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("source_parse_artifacts.id", ondelete="RESTRICT")
+    )
+    knowledge_revision_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_revisions.id", ondelete="CASCADE")
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default=IndexRunStatus.QUEUED)
+    index_config_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    chunker_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    embedding_provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(200), nullable=False)
+    embedding_config: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=sql_text("'{}'::jsonb")
+    )
+    embedding_dimensions: Mapped[int] = mapped_column(Integer, nullable=False)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    embedded_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    error_message: Mapped[str | None] = mapped_column(String(2000))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class RetrievalChunk(Base):
+    __tablename__ = "retrieval_chunks"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["knowledge_node_id", "space_id"],
+            ["knowledge_nodes.id", "knowledge_nodes.space_id"],
+            name="fk_retrieval_chunks_node_space",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["source_version_id", "source_id"],
+            ["source_versions.id", "source_versions.source_id"],
+            name="fk_retrieval_chunks_source_version_source",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["parse_artifact_id", "source_version_id"],
+            ["source_parse_artifacts.id", "source_parse_artifacts.source_version_id"],
+            name="fk_retrieval_chunks_artifact_version",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["section_id", "parse_artifact_id", "source_version_id"],
+            [
+                "source_sections.id",
+                "source_sections.parse_artifact_id",
+                "source_sections.source_version_id",
+            ],
+            name="fk_retrieval_chunks_section_artifact_version",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("index_run_id", "ordinal", name="uq_retrieval_chunks_run_ordinal"),
+        UniqueConstraint(
+            "space_id",
+            "content_identity",
+            "index_config_version",
+            "ordinal",
+            name="uq_retrieval_chunks_content_config",
+        ),
+        CheckConstraint(
+            "corpus_kind IN ('source_evidence','confirmed_knowledge')",
+            name="ck_retrieval_chunks_corpus",
+        ),
+        CheckConstraint(
+            "(corpus_kind = 'source_evidence' AND source_id IS NOT NULL "
+            "AND source_version_id IS NOT NULL AND parse_artifact_id IS NOT NULL "
+            "AND section_id IS NOT NULL AND knowledge_node_id IS NULL "
+            "AND knowledge_revision_id IS NULL) OR "
+            "(corpus_kind = 'confirmed_knowledge' AND knowledge_node_id IS NOT NULL "
+            "AND knowledge_revision_id IS NOT NULL AND source_id IS NULL "
+            "AND source_version_id IS NULL AND parse_artifact_id IS NULL AND section_id IS NULL)",
+            name="ck_retrieval_chunks_identity_shape",
+        ),
+        CheckConstraint("ordinal >= 0", name="ck_retrieval_chunks_ordinal"),
+        CheckConstraint("char_count > 0", name="ck_retrieval_chunks_char_count"),
+        CheckConstraint("token_count > 0", name="ck_retrieval_chunks_token_count"),
+        CheckConstraint("content_hash ~ '^[0-9a-f]{64}$'", name="ck_retrieval_chunks_hash"),
+        Index("ix_retrieval_chunks_space", "space_id"),
+        Index("ix_retrieval_chunks_path", "path", postgresql_using="gist"),
+        Index("ix_retrieval_chunks_source_version", "source_version_id", "ordinal"),
+        Index("ix_retrieval_chunks_search", "search_vector", postgresql_using="gin"),
+        Index(
+            "ix_retrieval_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_where=sql_text("active"),
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    index_run_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("retrieval_index_runs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    space_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    corpus_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    index_config_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=sql_text("true")
+    )
+    knowledge_node_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    knowledge_revision_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_revisions.id", ondelete="CASCADE")
+    )
+    source_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("sources.id", ondelete="RESTRICT")
+    )
+    source_version_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    parse_artifact_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    section_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_identity: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(1000))
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    char_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    path: Mapped[str] = mapped_column(Ltree(), nullable=False)
+    heading_path: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    locator: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR(),
+        Computed(
+            "to_tsvector('simple', retrieval_fts_lexemes(text))",
+            persisted=True,
+        ),
+        nullable=False,
+    )
+    embedding_model: Mapped[str] = mapped_column(String(200), nullable=False)
+    embedding_config: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=sql_text("'{}'::jsonb")
+    )
+    embedding: Mapped[list[float]] = mapped_column(Vector(1024), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class Job(TimestampMixin, Base):
     __tablename__ = "jobs"
     __table_args__ = (
@@ -1026,7 +1313,7 @@ class Job(TimestampMixin, Base):
             "kind",
             unique=True,
             postgresql_where=sql_text(
-                "source_version_id IS NOT NULL AND kind <> 'source_parse'"
+                "source_version_id IS NOT NULL AND kind NOT IN ('source_parse','source_index')"
             ),
         ),
     )
@@ -1095,9 +1382,7 @@ class JobRetryRequest(Base):
     __tablename__ = "job_retry_requests"
     __table_args__ = (
         UniqueConstraint("job_id", "idempotency_key", name="uq_job_retry_requests_key"),
-        UniqueConstraint(
-            "job_id", "target_attempt_number", name="uq_job_retry_requests_attempt"
-        ),
+        UniqueConstraint("job_id", "target_attempt_number", name="uq_job_retry_requests_attempt"),
         CheckConstraint("target_attempt_number > 0", name="ck_job_retry_target_attempt_positive"),
     )
 

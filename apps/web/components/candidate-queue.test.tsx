@@ -23,7 +23,7 @@ const ids = {
 const now = "2026-08-05T12:00:00Z";
 const bootstrap = {
   space: { id: ids.space, slug: "mine", name: "我的知识库" },
-  capabilities: { source_import: true, extraction_review: true, knowledge_tree: true, trusted_qa: false, spaced_review: false, evidence_agent: false },
+  capabilities: { source_import: true, extraction_review: true, knowledge_tree: true, retrieval_debug: false, trusted_qa: false, spaced_review: false, evidence_agent: false },
   statistics: { sources: 1, queued_jobs: 0, activity_events: 0 }, foundation_status: "ready",
 };
 const job = { id: ids.job, space_id: ids.space, source_version_id: ids.version, kind: "source_extract", status: "succeeded", progress: 100, attempt_count: 1, retryable: false, error_code: null, error_message: null, started_at: now, finished_at: now, created_at: now, updated_at: now };

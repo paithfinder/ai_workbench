@@ -11,9 +11,22 @@ const bootstrapPayload = {
     source_import: true,
     extraction_review: false,
     knowledge_tree: false,
+    knowledge_folder_import: true,
+    retrieval_debug: false,
     trusted_qa: false,
     spaced_review: false,
     evidence_agent: false,
+  },
+  limits: {
+    knowledge_import: {
+      max_entries: 500,
+      max_folders: 250,
+      max_depth: 32,
+      max_total_body_utf8_bytes: 5 * 1024 * 1024,
+      max_document_characters: 20_000,
+      max_relative_path_characters: 4_000,
+      allowed_extensions: [".md", ".txt"],
+    },
   },
   statistics: {
     sources: 0,

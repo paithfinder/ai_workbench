@@ -17,6 +17,7 @@ celery_app.conf.update(
         "knowledge_workbench.source_ingest": {"queue": "source-ingest"},
         "knowledge_workbench.source_parse": {"queue": "source-parse"},
         "knowledge_workbench.source_extract": {"queue": "source-extract"},
+        "knowledge_workbench.source_index": {"queue": "source-index"},
     },
     task_acks_late=True,
     task_reject_on_worker_lost=True,

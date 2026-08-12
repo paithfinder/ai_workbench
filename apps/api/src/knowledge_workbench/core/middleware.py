@@ -13,6 +13,7 @@ from knowledge_workbench.core.request_id import reset_request_id, set_request_id
 
 REQUEST_ID_HEADER = "X-Request-ID"
 _PASTED_TEXT_PATH_SUFFIX = "/sources/pasted-text"
+_KNOWLEDGE_IMPORT_PATH_SUFFIX = "/knowledge-imports"
 _JSON_ENVELOPE_ALLOWANCE = 4096
 
 
@@ -41,21 +42,21 @@ async def request_id_middleware(
         reset_request_id(token)
 
 
-def pasted_text_body_limit_middleware(
-    max_pasted_text_bytes: int,
+def request_body_limit_middleware(
+    *,
+    path_suffix: str,
+    max_request_bytes: int,
+    error_code: str,
+    error_message: str,
 ) -> Callable[
     [Request, Callable[[Request], Awaitable[Response]]],
     Awaitable[Response],
 ]:
-    max_request_bytes = max_pasted_text_bytes + _JSON_ENVELOPE_ALLOWANCE
-
     async def middleware(
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        if request.method != "POST" or not request.url.path.endswith(
-            _PASTED_TEXT_PATH_SUFFIX
-        ):
+        if request.method != "POST" or not request.url.path.endswith(path_suffix):
             return await call_next(request)
         raw_length = request.headers.get("content-length")
         if raw_length is not None:
@@ -75,8 +76,8 @@ def pasted_text_body_limit_middleware(
                 )
             if declared_length > max_request_bytes:
                 return error_response(
-                    code="pasted_text_too_large",
-                    message="Pasted text exceeds the configured size limit.",
+                    code=error_code,
+                    message=error_message,
                     status_code=413,
                 )
 
@@ -99,12 +100,40 @@ def pasted_text_body_limit_middleware(
             return await call_next(request)
         except _RequestBodyTooLarge:
             return error_response(
-                code="pasted_text_too_large",
-                message="Pasted text exceeds the configured size limit.",
+                code=error_code,
+                message=error_message,
                 status_code=413,
             )
 
     return middleware
+
+
+def pasted_text_body_limit_middleware(
+    max_pasted_text_bytes: int,
+) -> Callable[
+    [Request, Callable[[Request], Awaitable[Response]]],
+    Awaitable[Response],
+]:
+    return request_body_limit_middleware(
+        path_suffix=_PASTED_TEXT_PATH_SUFFIX,
+        max_request_bytes=max_pasted_text_bytes + _JSON_ENVELOPE_ALLOWANCE,
+        error_code="pasted_text_too_large",
+        error_message="Pasted text exceeds the configured size limit.",
+    )
+
+
+def knowledge_import_body_limit_middleware(
+    max_request_bytes: int,
+) -> Callable[
+    [Request, Callable[[Request], Awaitable[Response]]],
+    Awaitable[Response],
+]:
+    return request_body_limit_middleware(
+        path_suffix=_KNOWLEDGE_IMPORT_PATH_SUFFIX,
+        max_request_bytes=max_request_bytes,
+        error_code="knowledge_import_too_large",
+        error_message="Knowledge import request exceeds the configured size limit.",
+    )
 
 
 class _RequestBodyTooLarge(Exception):

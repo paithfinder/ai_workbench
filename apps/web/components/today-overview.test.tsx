@@ -14,6 +14,7 @@ const readyPayload = {
     source_import: true,
     extraction_review: false,
     knowledge_tree: false,
+    retrieval_debug: false,
     trusted_qa: false,
     spaced_review: false,
     evidence_agent: false,

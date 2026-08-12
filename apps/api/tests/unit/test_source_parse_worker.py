@@ -141,9 +141,20 @@ def _stored(attempt_id: object) -> dict[str, StoredObject]:
 
 
 async def test_stale_attempt_cannot_replace_winner_artifact_pointers() -> None:
+    class IndexingStub:
+        def __init__(self) -> None:
+            self.calls: list[tuple[object, dict[str, object]]] = []
+
+        async def request_source_rebuild(self, session: object, **kwargs: object) -> None:
+            self.calls.append((session, kwargs))
+
     source, version, artifact, result = _parse_state()
+    indexing = IndexingStub()
     worker = SourceParseWorker(
-        Settings(app_env="test"), DeterministicFakeParser(), FakeObjectStorage()
+        Settings(app_env="test"),
+        DeterministicFakeParser(),
+        FakeObjectStorage(),
+        indexing_service=indexing,  # type: ignore[arg-type]
     )
     now = datetime.now(UTC)
     job = Job(
@@ -206,6 +217,10 @@ async def test_stale_attempt_cannot_replace_winner_artifact_pointers() -> None:
     assert job.status == JobStatus.SUCCEEDED.value
     assert attempt.status == JobAttemptStatus.SUCCEEDED.value
     assert len(winner_session.added) == 1
+    assert len(indexing.calls) == 1
+    _, index_kwargs = indexing.calls[0]
+    assert index_kwargs["source_version_id"] == version.id
+    assert index_kwargs["idempotency_key"] == f"parse-ready:{artifact.id}"
 
 
 class _OverflowStorage(FakeObjectStorage):

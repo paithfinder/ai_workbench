@@ -69,9 +69,7 @@ def source_ingest(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
         ) from exc
 
 
-def _run_reliable_task(
-    self: Task[Any, Any], *, job_id: str, job_kind: JobKind
-) -> None:
+def _run_reliable_task(self: Task[Any, Any], *, job_id: str, job_kind: JobKind) -> None:
     from knowledge_workbench.worker.job_runner import JobAttemptError
     from knowledge_workbench.worker.job_runner import (
         release_transient_attempt_sync as release_attempt_sync,
@@ -87,6 +85,11 @@ def _run_reliable_task(
             mark_transient_failure_sync as mark_failure_sync,
         )
         from knowledge_workbench.worker.source_extract import run_source_extract_sync as run_sync
+    elif job_kind == JobKind.SOURCE_INDEX:
+        from knowledge_workbench.worker.source_index import (
+            mark_transient_failure_sync as mark_failure_sync,
+        )
+        from knowledge_workbench.worker.source_index import run_source_index_sync as run_sync
     else:
         raise RuntimeError(f"Unsupported reliable task kind: {job_kind}")
 
@@ -154,3 +157,13 @@ def source_parse(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
 def source_extract(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
     del space_id
     _run_reliable_task(self, job_id=job_id, job_kind=JobKind.SOURCE_EXTRACT)
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]
+    bind=True,
+    name="knowledge_workbench.source_index",
+    ignore_result=True,
+)
+def source_index(self: Task[Any, Any], *, job_id: str, space_id: str) -> None:
+    del space_id
+    _run_reliable_task(self, job_id=job_id, job_kind=JobKind.SOURCE_INDEX)

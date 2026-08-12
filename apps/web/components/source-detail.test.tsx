@@ -15,7 +15,7 @@ const ids = {
 const now = "2026-07-31T12:00:00Z";
 const bootstrap = {
   space: { id: ids.space, slug: "my-knowledge-base", name: "我的知识库" },
-  capabilities: { source_import: true, extraction_review: false, knowledge_tree: false, trusted_qa: false, spaced_review: false, evidence_agent: false },
+  capabilities: { source_import: true, extraction_review: false, knowledge_tree: false, retrieval_debug: false, trusted_qa: false, spaced_review: false, evidence_agent: false },
   statistics: { sources: 1, queued_jobs: 0, activity_events: 0 },
   foundation_status: "ready",
 };

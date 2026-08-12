@@ -274,6 +274,35 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  index-worker:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - path: ../../.env
+        required: false
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-knowledge_workbench}
+      POSTGRES_USER: ${POSTGRES_USER:-knowledge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-knowledge_dev}
+      CELERY_BROKER_URL: redis://redis:6379/1
+      JOB_ATTEMPT_LEASE_SECONDS: ${JOB_ATTEMPT_LEASE_SECONDS:-300}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-fake}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-1024}
+      EMBEDDING_URL: ${EMBEDDING_URL:-http://embedding:8080/v1/embeddings}
+      EMBEDDING_TIMEOUT_SECONDS: ${EMBEDDING_TIMEOUT_SECONDS:-30}
+    command: ["celery", "-A", "knowledge_workbench.worker.celery_app:celery_app", "worker", "--loglevel=INFO", "--queues=source-index", "--concurrency=1"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   relay:
     build:
       context: ../..

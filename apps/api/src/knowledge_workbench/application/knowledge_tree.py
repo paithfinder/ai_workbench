@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import and_, func, literal, or_, select
+from sqlalchemy import and_, func, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,7 @@ from knowledge_workbench.db.models import (
     KnowledgeWriteRequest,
     KnowledgeWriteResult,
     OutboxEvent,
+    RetrievalChunk,
     ReviewCard,
     Source,
     SourceParseArtifact,
@@ -824,6 +825,22 @@ class KnowledgeTreeService:
         new_path = f"{parent.path}.{_path_label(node.id)}"
         for descendant in descendants:
             descendant.path = _replace_path_prefix(descendant.path, old_path, new_path)
+        await session.execute(
+            update(RetrievalChunk)
+            .where(
+                RetrievalChunk.space_id == space_id,
+                RetrievalChunk.path.op("<@")(old_path),
+            )
+            .values(
+                path=func.text2ltree(
+                    func.regexp_replace(
+                        func.ltree2text(RetrievalChunk.path),
+                        f"^{old_path}",
+                        new_path,
+                    )
+                )
+            )
+        )
         node.parent_id = parent.id
         node.sort_order = await self._next_sort_order(session, space_id, parent.id)
         node.version += 1
@@ -886,6 +903,14 @@ class KnowledgeTreeService:
         for item in subtree:
             item.deleted_at = deleted_at
             item.version += 1
+        await session.execute(
+            update(RetrievalChunk)
+            .where(
+                RetrievalChunk.space_id == space_id,
+                RetrievalChunk.path.op("<@")(node.path),
+            )
+            .values(active=False)
+        )
         subtree_ids = [item.id for item in subtree]
         cards = list(
             await session.scalars(

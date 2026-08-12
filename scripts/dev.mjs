@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Unified local dev launcher for solo development.
-// Starts API + 3 Celery workers + outbox relay + Web in one terminal.
+// Starts API + 4 Celery workers + outbox relay + Web in one terminal.
 //
 // Prerequisites (must be running BEFORE you `pnpm dev`):
 //   - PostgreSQL on 5432 (with pgvector + ltree extensions, DB = knowledge_workbench)
@@ -20,12 +20,12 @@ import { platform } from "node:os";
 const isWindows = platform() === "win32";
 const useColor = process.stdout.isTTY && process.stderr.isTTY;
 
-// Order matches the README preview: api → 3 workers → relay → web.
+// Order matches the local stack: api → 4 workers → relay → web.
 const services = [
   {
     name: "api",
     color: "\x1b[36m", // cyan
-    cmd: "uv run --package knowledge-workbench-api uvicorn knowledge_workbench.main:app --app-dir apps/api/src --reload --host 0.0.0.0 --port 8000",
+    cmd: "uv run --package knowledge-workbench-api uvicorn knowledge_workbench.main:app --app-dir apps/api/src --reload --reload-dir apps/api/src --host 0.0.0.0 --port 8000",
   },
   {
     name: "ingest",
@@ -41,6 +41,11 @@ const services = [
     name: "extract",
     color: "\x1b[33m", // yellow
     cmd: "uv run --package knowledge-workbench-api celery -A knowledge_workbench.worker.celery_app:celery_app worker --loglevel=INFO --queues=source-extract --concurrency=1",
+  },
+  {
+    name: "index",
+    color: "\x1b[31m", // red
+    cmd: "uv run --package knowledge-workbench-api celery -A knowledge_workbench.worker.celery_app:celery_app worker --loglevel=INFO --queues=source-index --concurrency=1",
   },
   {
     name: "relay",
@@ -104,7 +109,7 @@ function startService(svc) {
   return child;
 }
 
-console.log("Starting 6 services. Press Ctrl+C once to stop all.");
+console.log("Starting 7 services. Press Ctrl+C once to stop all.");
 console.log(
   "Make sure PostgreSQL (5432), Redis (6379), MinIO (9000) are running.\n"
 );

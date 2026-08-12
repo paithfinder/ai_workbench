@@ -50,6 +50,8 @@ jobs:
       S3_SECRET_KEY: minioadmin
       S3_BUCKET: knowledge-sources
       AI_PROVIDER: fake
+      EMBEDDING_PROVIDER: fake
+      RUN_POSTGRES_INTEGRATION: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

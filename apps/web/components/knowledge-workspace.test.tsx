@@ -36,7 +36,7 @@ const nodes = [
 ];
 const revision = { id: ids.revision, node_id: ids.point, revision_number: 1, title: "原子知识", body: "只能以纯文本呈现的知识正文。", tags: ["方法"], conditions: [], exceptions: [], content_hash: "a".repeat(64), actor: "local", edit_reason: null, created_at: now };
 const evidence = { id: ids.evidence, node_id: ids.point, revision_id: ids.revision, revision_number: 1, source_id: ids.source, source_title: "真实来源", source_version_id: ids.sourceVersion, source_version_number: 2, source_content_hash: "d".repeat(64), parse_artifact_id: ids.artifact, artifact_revision: 3, section_id: ids.section, section_ordinal: 4, quote_hash: "b".repeat(64), content_hash: "c".repeat(64), locator: { page: 4 }, frozen_quote: "冻结的可信来源原文。", deep_link: `/sources/${ids.source}?versionId=${ids.sourceVersion}&artifactId=${ids.artifact}&sectionId=${ids.section}`, anchor_status: "exact", created_at: now };
-const bootstrap = { space: { id: ids.space, slug: "mine", name: "我的知识库" }, capabilities: { source_import: true, extraction_review: true, knowledge_tree: true, trusted_qa: false, spaced_review: false, evidence_agent: false }, statistics: { sources: 1, queued_jobs: 0, activity_events: 0 }, foundation_status: "ready" };
+const bootstrap = { space: { id: ids.space, slug: "mine", name: "我的知识库" }, capabilities: { source_import: true, extraction_review: true, knowledge_tree: true, knowledge_folder_import: true, retrieval_debug: false, trusted_qa: false, spaced_review: false, evidence_agent: false }, limits: { knowledge_import: { max_entries: 500, max_folders: 250, max_depth: 32, max_total_body_utf8_bytes: 5 * 1024 * 1024, max_document_characters: 20_000, max_relative_path_characters: 4_000, allowed_extensions: [".md", ".txt"] } }, statistics: { sources: 1, queued_jobs: 0, activity_events: 0 }, foundation_status: "ready" };
 
 function json(payload: unknown, status = 200) { return new Response(JSON.stringify(payload), { status, headers: { "Content-Type": "application/json" } }); }
 function detail(nodeId: string) {
@@ -129,6 +129,25 @@ describe("KnowledgeWorkspace", () => {
     expect(point).toHaveFocus();
     expect(screen.getByRole("treeitem", { name: /方法文档/ })).toHaveAttribute("aria-expanded", "true");
     expect(await screen.findByText("只能以纯文本呈现的知识正文。")).toBeInTheDocument();
+  });
+
+  it("opens direct folder import at the current directory and rejects unsupported files before API writes", async () => {
+    renderWorkspace();
+    const tree = await screen.findByRole("tree", { name: "知识目录" });
+    await userEvent.click(within(tree).getByRole("treeitem", { name: /研究/ }));
+    await userEvent.click(screen.getByRole("button", { name: "导入文件夹" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "导入已整理知识库" });
+    expect(within(dialog).getByText(/我的知识库 \/ 研究/)).toBeInTheDocument();
+    const unsupported = new File(["binary"], "notes.pdf", { type: "application/pdf" });
+    Object.defineProperty(unsupported, "webkitRelativePath", { value: "知识库/notes.pdf" });
+    fireEvent.change(within(dialog).getByLabelText("选择知识库文件夹"), {
+      target: { files: [unsupported] },
+    });
+
+    expect(await within(dialog).findByText(/不是支持的 Markdown 或 TXT/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "开始导入" })).toBeDisabled();
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).includes("/knowledge-imports"))).toBe(false);
   });
 
   it("does not offer revision editing for folders and restores dialog focus", async () => {

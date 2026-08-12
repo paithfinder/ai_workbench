@@ -1,6 +1,18 @@
 {
   "components": {
     "schemas": {
+      "BootstrapLimitsResponse": {
+        "properties": {
+          "knowledge_import": {
+            "$ref": "#/components/schemas/KnowledgeImportLimitsResponse"
+          }
+        },
+        "required": [
+          "knowledge_import"
+        ],
+        "title": "BootstrapLimitsResponse",
+        "type": "object"
+      },
       "BootstrapResponse": {
         "properties": {
           "capabilities": {
@@ -12,6 +24,9 @@
             "title": "Foundation Status",
             "type": "string"
           },
+          "limits": {
+            "$ref": "#/components/schemas/BootstrapLimitsResponse"
+          },
           "space": {
             "$ref": "#/components/schemas/KnowledgeSpaceResponse"
           },
@@ -22,6 +37,7 @@
         "required": [
           "space",
           "capabilities",
+          "limits",
           "statistics"
         ],
         "title": "BootstrapResponse",
@@ -831,9 +847,19 @@
             "title": "Extraction Review",
             "type": "boolean"
           },
+          "knowledge_folder_import": {
+            "default": true,
+            "title": "Knowledge Folder Import",
+            "type": "boolean"
+          },
           "knowledge_tree": {
             "default": true,
             "title": "Knowledge Tree",
+            "type": "boolean"
+          },
+          "retrieval_debug": {
+            "default": true,
+            "title": "Retrieval Debug",
             "type": "boolean"
           },
           "source_import": {
@@ -853,6 +879,31 @@
           }
         },
         "title": "CapabilityResponse",
+        "type": "object"
+      },
+      "ChannelStatusResponse": {
+        "properties": {
+          "indexed_chunks": {
+            "title": "Indexed Chunks",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "building",
+              "degraded",
+              "failed",
+              "empty"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "indexed_chunks"
+        ],
+        "title": "ChannelStatusResponse",
         "type": "object"
       },
       "CompleteUploadResponse": {
@@ -898,6 +949,282 @@
           "title"
         ],
         "title": "CreateSourceRequest",
+        "type": "object"
+      },
+      "DebugRetrievalHitResponse": {
+        "properties": {
+          "chunk_id": {
+            "format": "uuid",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "content_identity": {
+            "title": "Content Identity",
+            "type": "string"
+          },
+          "corpus_kind": {
+            "enum": [
+              "source_evidence",
+              "confirmed_knowledge"
+            ],
+            "title": "Corpus Kind",
+            "type": "string"
+          },
+          "deep_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deep Link"
+          },
+          "knowledge_node_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Node Id"
+          },
+          "knowledge_path": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Knowledge Path",
+            "type": "array"
+          },
+          "knowledge_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Revision Id"
+          },
+          "parse_artifact_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parse Artifact Id"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "raw_score": {
+            "title": "Raw Score",
+            "type": "number"
+          },
+          "score_semantics": {
+            "title": "Score Semantics",
+            "type": "string"
+          },
+          "section_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section Id"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Title"
+          },
+          "source_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version Id"
+          },
+          "source_version_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version Number"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "content_identity",
+          "rank",
+          "raw_score",
+          "score_semantics",
+          "corpus_kind",
+          "knowledge_node_id",
+          "knowledge_revision_id",
+          "knowledge_path",
+          "source_id",
+          "source_title",
+          "source_version_id",
+          "source_version_number",
+          "parse_artifact_id",
+          "section_id",
+          "snippet",
+          "deep_link"
+        ],
+        "title": "DebugRetrievalHitResponse",
+        "type": "object"
+      },
+      "DebugRetrievalRequest": {
+        "properties": {
+          "channels": {
+            "items": {
+              "enum": [
+                "keyword",
+                "vector"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Channels",
+            "type": "array"
+          },
+          "query": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ScopePreviewRequest"
+          },
+          "top_k": {
+            "default": 5,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query",
+          "scope"
+        ],
+        "title": "DebugRetrievalRequest",
+        "type": "object"
+      },
+      "DebugRetrievalResponse": {
+        "properties": {
+          "channel_errors": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Channel Errors",
+            "type": "object"
+          },
+          "embedding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmbeddingResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "keyword_hits": {
+            "items": {
+              "$ref": "#/components/schemas/DebugRetrievalHitResponse"
+            },
+            "title": "Keyword Hits",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "scope_summary": {
+            "$ref": "#/components/schemas/ScopeSummaryResponse"
+          },
+          "timings_ms": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Timings Ms",
+            "type": "object"
+          },
+          "vector_hits": {
+            "items": {
+              "$ref": "#/components/schemas/DebugRetrievalHitResponse"
+            },
+            "title": "Vector Hits",
+            "type": "array"
+          }
+        },
+        "required": [
+          "query",
+          "scope_summary",
+          "embedding",
+          "keyword_hits",
+          "vector_hits",
+          "channel_errors",
+          "timings_ms"
+        ],
+        "title": "DebugRetrievalResponse",
         "type": "object"
       },
       "DependencyStatus": {
@@ -975,6 +1302,29 @@
           "name"
         ],
         "title": "DestinationResponse",
+        "type": "object"
+      },
+      "EmbeddingResponse": {
+        "properties": {
+          "dimensions": {
+            "title": "Dimensions",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "dimensions"
+        ],
+        "title": "EmbeddingResponse",
         "type": "object"
       },
       "ErrorBody": {
@@ -1197,6 +1547,112 @@
           "source_title"
         ],
         "title": "ExtractionRunResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IndexRebuildResponse": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "rebuild_id": {
+            "format": "uuid",
+            "title": "Rebuild Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rebuild_id",
+          "status",
+          "message"
+        ],
+        "title": "IndexRebuildResponse",
+        "type": "object"
+      },
+      "IndexStatusResponse": {
+        "properties": {
+          "index_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Version"
+          },
+          "indexed_chunks": {
+            "title": "Indexed Chunks",
+            "type": "integer"
+          },
+          "keyword": {
+            "$ref": "#/components/schemas/ChannelStatusResponse"
+          },
+          "pending_chunks": {
+            "title": "Pending Chunks",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "building",
+              "degraded",
+              "failed",
+              "empty"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "vector": {
+            "$ref": "#/components/schemas/VectorStatusResponse"
+          }
+        },
+        "required": [
+          "status",
+          "index_version",
+          "indexed_chunks",
+          "pending_chunks",
+          "keyword",
+          "vector",
+          "updated_at"
+        ],
+        "title": "IndexStatusResponse",
         "type": "object"
       },
       "JobKind": {
@@ -1469,6 +1925,233 @@
           "created_at"
         ],
         "title": "KnowledgeEvidenceResponse",
+        "type": "object"
+      },
+      "KnowledgeImportCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeImportDocument"
+            },
+            "minItems": 1,
+            "title": "Documents",
+            "type": "array"
+          },
+          "expected_parent_version": {
+            "exclusiveMinimum": 0.0,
+            "title": "Expected Parent Version",
+            "type": "integer"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
+          "root_name": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Root Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_parent_version",
+          "root_name",
+          "documents"
+        ],
+        "title": "KnowledgeImportCreate",
+        "type": "object"
+      },
+      "KnowledgeImportDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "relative_path": {
+            "minLength": 1,
+            "title": "Relative Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relative_path",
+          "body"
+        ],
+        "title": "KnowledgeImportDocument",
+        "type": "object"
+      },
+      "KnowledgeImportItemResponse": {
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "folder",
+              "document"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "node_id": {
+            "format": "uuid",
+            "title": "Node Id",
+            "type": "string"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "relative_path": {
+            "title": "Relative Path",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ordinal",
+          "relative_path",
+          "kind",
+          "node_id",
+          "revision_id",
+          "content_hash"
+        ],
+        "title": "KnowledgeImportItemResponse",
+        "type": "object"
+      },
+      "KnowledgeImportLimitsResponse": {
+        "properties": {
+          "allowed_extensions": {
+            "default": [
+              ".md",
+              ".txt"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Extensions",
+            "type": "array"
+          },
+          "max_depth": {
+            "title": "Max Depth",
+            "type": "integer"
+          },
+          "max_document_characters": {
+            "title": "Max Document Characters",
+            "type": "integer"
+          },
+          "max_entries": {
+            "title": "Max Entries",
+            "type": "integer"
+          },
+          "max_folders": {
+            "title": "Max Folders",
+            "type": "integer"
+          },
+          "max_relative_path_characters": {
+            "title": "Max Relative Path Characters",
+            "type": "integer"
+          },
+          "max_total_body_utf8_bytes": {
+            "title": "Max Total Body Utf8 Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_entries",
+          "max_folders",
+          "max_depth",
+          "max_total_body_utf8_bytes",
+          "max_document_characters",
+          "max_relative_path_characters"
+        ],
+        "title": "KnowledgeImportLimitsResponse",
+        "type": "object"
+      },
+      "KnowledgeImportResponse": {
+        "properties": {
+          "idempotency_key": {
+            "title": "Idempotency Key",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeImportItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "request_id": {
+            "format": "uuid",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "root_node_id": {
+            "format": "uuid",
+            "title": "Root Node Id",
+            "type": "string"
+          },
+          "status": {
+            "const": "succeeded",
+            "default": "succeeded",
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/KnowledgeImportSummaryResponse"
+          }
+        },
+        "required": [
+          "request_id",
+          "idempotency_key",
+          "root_node_id",
+          "summary",
+          "items"
+        ],
+        "title": "KnowledgeImportResponse",
+        "type": "object"
+      },
+      "KnowledgeImportSummaryResponse": {
+        "properties": {
+          "document_count": {
+            "title": "Document Count",
+            "type": "integer"
+          },
+          "entry_count": {
+            "title": "Entry Count",
+            "type": "integer"
+          },
+          "folder_count": {
+            "title": "Folder Count",
+            "type": "integer"
+          },
+          "total_body_utf8_bytes": {
+            "title": "Total Body Utf8 Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entry_count",
+          "folder_count",
+          "document_count",
+          "total_body_utf8_bytes"
+        ],
+        "title": "KnowledgeImportSummaryResponse",
         "type": "object"
       },
       "KnowledgeNodeCreate": {
@@ -2369,6 +3052,124 @@
         "title": "ScheduleExtractionResponse",
         "type": "object"
       },
+      "ScopePreviewRequest": {
+        "properties": {
+          "include_descendants": {
+            "default": true,
+            "title": "Include Descendants",
+            "type": "boolean"
+          },
+          "scope_node_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Node Id"
+          }
+        },
+        "title": "ScopePreviewRequest",
+        "type": "object"
+      },
+      "ScopePreviewResponse": {
+        "properties": {
+          "scope_summary": {
+            "$ref": "#/components/schemas/ScopeSummaryResponse"
+          }
+        },
+        "required": [
+          "scope_summary"
+        ],
+        "title": "ScopePreviewResponse",
+        "type": "object"
+      },
+      "ScopeSummaryResponse": {
+        "properties": {
+          "chunk_count": {
+            "title": "Chunk Count",
+            "type": "integer"
+          },
+          "include_descendants": {
+            "title": "Include Descendants",
+            "type": "boolean"
+          },
+          "index_config_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Config Version"
+          },
+          "index_status": {
+            "enum": [
+              "ready",
+              "building",
+              "degraded",
+              "failed",
+              "empty"
+            ],
+            "title": "Index Status",
+            "type": "string"
+          },
+          "knowledge_count": {
+            "title": "Knowledge Count",
+            "type": "integer"
+          },
+          "node_kind": {
+            "title": "Node Kind",
+            "type": "string"
+          },
+          "node_title": {
+            "title": "Node Title",
+            "type": "string"
+          },
+          "scope_node_id": {
+            "format": "uuid",
+            "title": "Scope Node Id",
+            "type": "string"
+          },
+          "scope_path": {
+            "title": "Scope Path",
+            "type": "string"
+          },
+          "scope_snapshot_hash": {
+            "title": "Scope Snapshot Hash",
+            "type": "string"
+          },
+          "source_count": {
+            "title": "Source Count",
+            "type": "integer"
+          },
+          "source_version_count": {
+            "title": "Source Version Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scope_node_id",
+          "include_descendants",
+          "scope_snapshot_hash",
+          "scope_path",
+          "node_kind",
+          "node_title",
+          "knowledge_count",
+          "source_count",
+          "source_version_count",
+          "chunk_count",
+          "index_status",
+          "index_config_version"
+        ],
+        "title": "ScopeSummaryResponse",
+        "type": "object"
+      },
       "SectionResponse": {
         "properties": {
           "artifact_id": {
@@ -2875,6 +3676,107 @@
           "expires_at"
         ],
         "title": "UploadReservationResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VectorStatusResponse": {
+        "properties": {
+          "dimensions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dimensions"
+          },
+          "indexed_chunks": {
+            "title": "Indexed Chunks",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "building",
+              "degraded",
+              "failed",
+              "empty"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "indexed_chunks",
+          "provider",
+          "model",
+          "dimensions"
+        ],
+        "title": "VectorStatusResponse",
         "type": "object"
       },
       "WebSourceRequest": {
@@ -3773,6 +4675,162 @@
         ]
       }
     },
+    "/api/v1/knowledge-spaces/{space_id}/knowledge-import-requests/{idempotency_key}": {
+      "get": {
+        "operationId": "get_knowledge_import_request",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "idempotency_key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeImportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Get Knowledge Import Request",
+        "tags": [
+          "knowledge-import"
+        ]
+      }
+    },
+    "/api/v1/knowledge-spaces/{space_id}/knowledge-imports": {
+      "post": {
+        "operationId": "create_knowledge_import",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeImportCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeImportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Create Knowledge Import",
+        "tags": [
+          "knowledge-import"
+        ]
+      }
+    },
     "/api/v1/knowledge-spaces/{space_id}/knowledge-nodes": {
       "post": {
         "operationId": "create_knowledge_node",
@@ -4366,6 +5424,209 @@
         "summary": "Get Knowledge Write Request",
         "tags": [
           "knowledge-tree"
+        ]
+      }
+    },
+    "/api/v1/knowledge-spaces/{space_id}/retrieval/debug-search": {
+      "post": {
+        "operationId": "debug_retrieval_search",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DebugRetrievalRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DebugRetrievalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Debug Search",
+        "tags": [
+          "retrieval"
+        ]
+      }
+    },
+    "/api/v1/knowledge-spaces/{space_id}/retrieval/index-rebuilds": {
+      "post": {
+        "operationId": "rebuild_retrieval_index",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexRebuildResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Index Rebuilds",
+        "tags": [
+          "retrieval"
+        ]
+      }
+    },
+    "/api/v1/knowledge-spaces/{space_id}/retrieval/index-status": {
+      "get": {
+        "operationId": "get_retrieval_index_status",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Index Status",
+        "tags": [
+          "retrieval"
+        ]
+      }
+    },
+    "/api/v1/knowledge-spaces/{space_id}/retrieval/scope-preview": {
+      "post": {
+        "operationId": "preview_retrieval_scope",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScopePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scope Preview",
+        "tags": [
+          "retrieval"
         ]
       }
     },

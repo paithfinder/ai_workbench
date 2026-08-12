@@ -5,6 +5,7 @@ from starlette.responses import Response
 from starlette.types import Message
 
 from knowledge_workbench.core.middleware import (
+    knowledge_import_body_limit_middleware,
     normalize_request_id,
     pasted_text_body_limit_middleware,
 )
@@ -79,3 +80,29 @@ async def test_pasted_text_body_limit_rejects_streaming_overflow() -> None:
     response = await pasted_text_body_limit_middleware(-4090)(request, call_next)
 
     assert response.status_code == 413
+
+
+async def test_knowledge_import_body_limit_rejects_declared_overflow() -> None:
+    request = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/api/v1/knowledge-spaces/space/knowledge-imports",
+            "headers": [(b"content-length", b"11")],
+            "query_string": b"",
+            "scheme": "http",
+            "server": ("test", 80),
+            "client": ("test", 1),
+        }
+    )
+    called = False
+
+    async def call_next(_: Request) -> Response:
+        nonlocal called
+        called = True
+        return Response()
+
+    response = await knowledge_import_body_limit_middleware(10)(request, call_next)
+
+    assert response.status_code == 413
+    assert not called

@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Header, status
 from pydantic import BaseModel, Field
 
-from knowledge_workbench.api.dependencies import SessionDependency
+from knowledge_workbench.api.dependencies import SessionDependency, SettingsDependency
 from knowledge_workbench.application.candidate_review import (
     CandidateAccept,
     CandidateEdit,
@@ -16,6 +16,7 @@ from knowledge_workbench.application.candidate_review import (
     DestinationRecord,
     ReviewOutcome,
 )
+from knowledge_workbench.application.indexing import IndexingService
 from knowledge_workbench.core.errors import ErrorEnvelope
 
 router = APIRouter(prefix="/api/v1/knowledge-spaces/{space_id}", tags=["candidate-review"])
@@ -153,6 +154,7 @@ async def accept_candidate(
     request: CandidateAccept,
     idempotency_key: IdempotencyKey,
     session: SessionDependency,
+    settings: SettingsDependency,
 ) -> CandidateReviewResponse:
     async with session.begin():
         outcome = await CandidateReviewService().accept(
@@ -162,6 +164,14 @@ async def accept_candidate(
             idempotency_key=idempotency_key,
             request=request,
         )
+        if outcome.knowledge_revision_id is not None:
+            await IndexingService().request_knowledge_rebuild(
+                session,
+                settings=settings,
+                space_id=space_id,
+                revision_id=outcome.knowledge_revision_id,
+                idempotency_key=f"candidate-accept:{outcome.result_id}",
+            )
     return _review_response(outcome)
 
 

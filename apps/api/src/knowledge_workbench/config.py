@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     s3_presign_ttl_seconds: int = Field(default=900, gt=0, le=604800)
     max_upload_size_bytes: int = Field(default=25 * 1024 * 1024, gt=0)
     max_pasted_text_size_bytes: int = Field(default=1 * 1024 * 1024, gt=0)
+    knowledge_import_max_entries: int = Field(default=500, gt=0, le=2000)
+    knowledge_import_max_folders: int = Field(default=250, gt=0, le=1000)
+    knowledge_import_max_depth: int = Field(default=32, gt=0, le=64)
+    knowledge_import_max_total_body_bytes: int = Field(default=5 * 1024 * 1024, gt=0)
+    knowledge_import_max_document_characters: int = Field(default=20_000, gt=0)
+    knowledge_import_max_relative_path_characters: int = Field(default=4_000, gt=0)
+    knowledge_import_max_request_bytes: int = Field(default=16 * 1024 * 1024, gt=0)
     web_fetch_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
     web_fetch_total_timeout_seconds: float = Field(default=15.0, gt=0, le=300)
     web_fetch_max_body_bytes: int = Field(default=5 * 1024 * 1024, gt=0)
@@ -48,6 +55,7 @@ class Settings(BaseSettings):
 
     celery_broker_url: str = "redis://localhost:6379/1"
     job_attempt_lease_seconds: int = Field(default=300, gt=0)
+    index_heartbeat_seconds: int = Field(default=30, gt=0)
     parse_attempt_lease_seconds: int = Field(default=1800, gt=0)
     parse_heartbeat_seconds: int = Field(default=30, gt=0)
     parse_timeout_seconds: int = Field(default=1800, gt=0)
@@ -60,6 +68,17 @@ class Settings(BaseSettings):
     parser_version: str = "2.117.0"
     outbox_relay_interval_seconds: float = Field(default=1.0, gt=0)
     outbox_batch_size: int = Field(default=50, gt=0, le=500)
+
+    chunker_version: str = "d7-structured-v1"
+    chunk_target_characters: int = Field(default=1800, gt=100, le=10000)
+    chunk_overlap_characters: int = Field(default=240, ge=0, le=2000)
+    index_version: str = "d7-v1"
+    embedding_provider: Literal["fake", "bge_m3_http"] = "fake"
+    embedding_model: str = "BAAI/bge-m3"
+    embedding_dimensions: Literal[1024] = 1024
+    embedding_url: str = "http://embedding:8080/v1/embeddings"
+    embedding_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    retrieval_default_top_k: int = Field(default=10, gt=0, le=100)
 
     ai_provider: Literal["fake", "anthropic"] = "fake"
     claude_model: str = Field(default="claude-opus-5", min_length=1)

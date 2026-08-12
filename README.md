@@ -1,8 +1,8 @@
 # 自序 · 个人知识工作台
 
-D1 建立两周 MVP 的可运行基础，D2 打通不可变来源导入，D3 加入可重试的真实文档解析、版本化解析产物与可信引用定位，D4 实现结构化 AI 提炼与可追踪 Extraction Job，D5 交付候选编辑、人工决策与正式知识入库事务，D6 已加入 PostgreSQL 持久化知识树、Revision 编辑、词法搜索和不可漂移的来源深链。当前优先服务个人知识闭环；向量检索与问答仍属于后续阶段。
+D1 建立两周 MVP 的可运行基础，D2 打通不可变来源导入，D3 加入可重试的真实文档解析、版本化解析产物与可信引用定位，D4 实现结构化 AI 提炼与可追踪 Extraction Job，D5 交付候选编辑、人工决策与正式知识入库事务，D6 已加入 PostgreSQL 持久化知识树、Revision 编辑、词法搜索和不可漂移的来源深链。D7 边界是 Chunk、Embedding、Keyword/Vector 检索调试与离线检索评测；带引用问答不在 D7 范围。
 
-## 当前 D1–D6 能力
+## 当前 D1–D7 能力
 
 - Next.js 应用与 FastAPI 服务固定为 Web `http://localhost:3000`、API `http://localhost:8000`；使用单个预置个人知识空间，数据模型与接口仍显式携带 `space_id`。
 - PostgreSQL/pgvector 保存业务事实，Redis 作为 Celery broker/短期基础设施，MinIO 保存不可变来源原件与解析产物；Alembic 管理迁移。
@@ -18,6 +18,7 @@ D1 建立两周 MVP 的可运行基础，D2 打通不可变来源导入，D3 加
 - D5 写接口要求 `Idempotency-Key` 与 `expected_version`，支持结果重放、冲突检测和不确定响应 reconciliation；接受来源 Evidence 前会重新校验版本、解析产物、locator 与 quote hash。
 - D6 以邻接表和 PostgreSQL `ltree` 持久化 `root/folder/document/point/source` 五类节点；支持创建目录/文档、追加 Revision、移动子树、软删除、乐观锁、幂等重放和写结果 reconciliation。追加 Revision 会保留历史并显式继承当前冻结 Evidence；编辑界面要求保存前确认修改后的正文仍由这些来源支持。
 - `/knowledge` 提供可折叠 WAI-ARIA Tree、服务端标题/正文/显示路径/关联来源标题搜索、详情维护和 Citation drawer；引用固定到精确 SourceVersion、ParseArtifact 与 Section，并可深链到历史原文高亮位置。
+- D7 通过真实 HTTP debug API 分别暴露 Keyword 与 Vector Top-K 结果。`evals/` 的 32 条中文 seeds 覆盖 scope、内容 identity、section、困难负样本和拒答；retrieval runner 只对 27 条 `should_abstain=false` 的可回答样本计算 Recall@5、可选 MRR 与 Scope Leakage，拒答字段留给 D8 答案评测。
 - 合成 parser fixture 覆盖 UTF-8 中文/Unicode、静态 HTML、单页/多页 PDF、表格、纯图片、空文件和畸形 PDF，并冻结来源哈希与期望 quote hash。
 
 架构决策见 [`docs/adr/`](docs/adr/)，D3 worker/runtime 决策见 [`ADR-0005`](docs/adr/0005-d3-parse-worker-and-runtime.md)。
@@ -73,6 +74,66 @@ docker compose -f infra/compose/docker-compose.yml down
 | `PARSER_NAME` / `PARSER_VERSION` | `docling` / `2.117.0` | 解析 artifact 的预定 parser 元数据 |
 
 租约应覆盖正常解析窗口；心跳周期必须显著短于租约。parse timeout 和资源限制用于停止单次尝试，数据库租约与 Celery 重试用于恢复，而不是以提高 worker 并发绕过限制。
+
+## D7 检索边界与本地 BGE-M3
+
+D7 只负责确定性 chunk、embedding/index、Keyword/Vector 检索、scope 隔离和检索调试评测。真实调试端点为：
+
+```text
+POST /api/v1/knowledge-spaces/{space_id}/retrieval/debug-search
+```
+
+请求包含 `query`、`scope.scope_node_id`、`scope.include_descendants`、`top_k` 与 `channels`；响应分别返回 `keyword_hits`、`vector_hits`，并报告 `embedding`、`channel_errors` 和 `timings_ms`。该 debug API 只用于开发/评测，不是面向最终用户的问答接口。
+
+本地原生运行 BGE-M3 时，先启动暴露 OpenAI-compatible `/v1/embeddings` 的 HTTP 服务并加载 `BAAI/bge-m3`，再配置 API：
+
+```dotenv
+EMBEDDING_PROVIDER=bge_m3_http
+EMBEDDING_URL=http://127.0.0.1:<port>/v1/embeddings
+EMBEDDING_MODEL=BAAI/bge-m3
+EMBEDDING_DIMENSIONS=1024
+EMBEDDING_TIMEOUT_SECONDS=30
+```
+
+这里 `EMBEDDING_URL` 是完整 endpoint，不是服务 origin；当前 adapter 不需要 API key。API 在主机原生运行时使用 `127.0.0.1`；只有 API 在 Compose 容器中、embedding 服务在宿主机时才使用 `http://host.docker.internal:<port>/v1/embeddings`。模型服务必须返回真实 1024 维向量，并与数据库索引维度一致。chunk/index 还受 `CHUNKER_VERSION`、`CHUNK_TARGET_CHARACTERS`、`CHUNK_OVERLAP_CHARACTERS`、`INDEX_VERSION` 与 `RETRIEVAL_DEFAULT_TOP_K` 控制；所有默认值以最终 `.env.example` 为准。
+
+Fake Provider 仅用于确定性单元测试、HTTP transport smoke 和失败路径，不代表 BGE-M3，也不能作为“真实 D7 基线”。runner 默认拒绝 Fake；只有显式 `--allow-fake-smoke` 才允许无 fixture map 执行，此时必须用 `--smoke-scope-node-id` 指向测试空间内真实存在的范围节点 UUID，并将报告标记为 `baseline_eligible=false` 与 `run_kind=fake-smoke`。真实 baseline 还必须同时满足：`embedding.provider=bge_m3_http`、model 明确为 BGE-M3、`embedding.dimensions=1024`、响应含 `scope_summary.index_config_version`，且整次运行 metadata 不漂移。
+
+### 准备可执行评测 fixture
+
+seeds 中的 `scope.key`、content identity 和 section ID 是稳定的评测键，不伪装成数据库 UUID。真实 baseline 前必须显式启用 BGE-M3，并用专用装载器创建隔离的评测空间：
+
+```dotenv
+EMBEDDING_PROVIDER=bge_m3_http
+EMBEDDING_URL=http://127.0.0.1:<port>/v1/embeddings
+EMBEDDING_MODEL=BAAI/bge-m3
+EMBEDDING_DIMENSIONS=1024
+```
+
+```bash
+uv run --package knowledge-workbench-api python evals/prepare_retrieval_fixture.py
+```
+
+装载器会先探测真实 BGE-M3、确认 PostgreSQL 已迁移到 D7 当前 head（含 `0009_d7_cjk_fts`），然后按 dataset/version 的稳定 UUID 创建专用评测空间、范围节点、ready 来源版本和 Section，直接复用 `IndexingService` 与 `SourceIndexWorker` 生成正式 Chunk。它不会写入默认个人空间，也不会经过 Redis、MinIO 或 Docling。成功后生成被 Git 忽略的 `evals/fixture-map.local.json`，其中包含真实评测空间 UUID、完整映射以及实际 embedding/index metadata；相同 dataset/version 重复执行是幂等的，数据内容变化必须先提升 dataset version。
+
+只检查 BGE、数据库和已装载 fixture，不写数据：
+
+```bash
+uv run --package knowledge-workbench-api python evals/prepare_retrieval_fixture.py --check-only
+```
+
+然后启动 development API 和 Web，使用映射文件中的 `space_id` 运行：
+
+```bash
+uv run --package knowledge-workbench-api python evals/run_retrieval.py \
+  --base-url http://localhost:8000 \
+  --space-id <fixture-map.local.json 中的 space_id> \
+  --fixture-map evals/fixture-map.local.json \
+  --mrr \
+  --output evals/retrieval-report.json
+```
+
+runner 会在发请求前拒绝不完整或仍含 `<placeholder>` 的映射。Scope Leakage 只按已映射的 `out_of_scope_content_identities` 命中计算；所有范围外对照内容都存放在评测空间的独立兄弟子树中，用于验证 `space_id + ltree` 过滤，而不是根据不存在于冻结 hit 契约的 scope 字段猜测。`evals/fixture-map.example.json` 只展示格式，不是可执行 baseline 数据，也不得直接作为报告输入。
 
 ## 本地开发
 
@@ -133,8 +194,27 @@ pnpm contract:check
 ## 测试与检查
 
 ```bash
-# RAG JSON + Schema（无需第三方 Python 包）
+# D7 RAG JSON + Schema（无需第三方 Python 包）
 python evals/validate_seeds.py
+
+# validator 与 HTTP runner 单元/自测
+python -m unittest discover -s evals -p "test_*.py" -v
+python -m py_compile evals/validate_seeds.py evals/run_retrieval.py evals/test_eval_tools.py
+
+# 在已导入且已索引评测内容的真实 D7 API 上运行 Recall@5、MRR、Scope Leakage
+python evals/run_retrieval.py \
+  --base-url http://localhost:8000 \
+  --space-id <真实评测空间UUID> \
+  --fixture-map evals/fixture-map.local.json \
+  --mrr \
+  --output evals/retrieval-report.json
+
+# Fake 只能做连通性 smoke，输出不会被标记为真实 baseline
+python evals/run_retrieval.py \
+  --base-url http://localhost:8000 \
+  --space-id <测试空间UUID> \
+  --smoke-scope-node-id <测试空间内范围节点UUID> \
+  --allow-fake-smoke
 
 # D3 fixture、确定性 parser contract 与真实 Docling fixture 回归
 uv run --package knowledge-workbench-api pytest \
@@ -162,8 +242,8 @@ CI 会显式执行 D3 fixture、确定性 parser contract 与真实 Docling fixt
 
 ## 尚未实现
 
-- Chunk、Embedding、pgvector/HNSW、全文/向量混合检索、检索调试和 Recall@5（D7 范围）。
-- 带引用问答、RRF/reranker、LangGraph/Agent，以及 D10 的 FSRS 调度字段与完整间隔复习。
+- D8 的带引用问答、RRF/reranker、query rewrite、答案拒答判定、Citation Validity 与 Claim Citation Coverage；这些不是 D7 retrieval runner 的目标，不能由 Recall@5 结果代替。
+- LangGraph/Agent，以及 D10 的 FSRS 调度字段与完整间隔复习。
 - 多空间创建/切换、团队协作、用户身份、权限与配额管理。
 - 生产 AI 密钥托管、预算/成本告警和更完整的限流策略；本地默认使用 Fake Provider，真实 Anthropic 调用需要显式服务端配置。
 - 类 Claude Code 的受控改码及 Git/Shell 执行；本期仅保留只读代码理解与可信引用方向。

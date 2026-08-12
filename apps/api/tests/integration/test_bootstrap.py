@@ -20,9 +20,22 @@ def test_bootstrap_reads_seeded_default_space_and_real_zero_counts() -> None:
             "source_import": True,
             "extraction_review": True,
             "knowledge_tree": True,
+            "knowledge_folder_import": True,
+            "retrieval_debug": True,
             "trusted_qa": False,
             "spaced_review": False,
             "evidence_agent": False,
+        },
+        "limits": {
+            "knowledge_import": {
+                "max_entries": 500,
+                "max_folders": 250,
+                "max_depth": 32,
+                "max_total_body_utf8_bytes": 5 * 1024 * 1024,
+                "max_document_characters": 20_000,
+                "max_relative_path_characters": 4_000,
+                "allowed_extensions": [".md", ".txt"],
+            }
         },
         "statistics": {
             "sources": 0,

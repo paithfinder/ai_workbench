@@ -1,6 +1,6 @@
 {
   "dataset": "d1-zh-rag-seeds",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "language": "zh-CN",
   "seeds": [
     {
@@ -8,200 +8,1128 @@
       "status": "draft",
       "category": "事实检索",
       "question": "文档中规定的知识条目审核人是谁？",
-      "contexts": ["《知识治理手册》写明：每个新知识条目由创建者的直属领域负责人审核，审核通过后才能进入已确认知识库。"],
+      "contexts": [
+        "《知识治理手册》写明：每个新知识条目由创建者的直属领域负责人审核，审核通过后才能进入已确认知识库。"
+      ],
       "expected_answer": "新知识条目由创建者的直属领域负责人审核。",
-      "expected_citations": [0],
-      "tags": ["单跳", "角色"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "单跳",
+        "角色"
+      ],
+      "scope": {
+        "key": "knowledge-governance",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "knowledge-governance:review"
+      ],
+      "expected_section_ids": [
+        "section-001"
+      ],
+      "difficult_negative_content_identities": [
+        "knowledge-governance:author-review"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-knowledge-governance:rag-zh-001"
+      ]
     },
     {
       "id": "rag-zh-002",
       "status": "draft",
       "category": "事实检索",
       "question": "项目晨会固定在几点开始？",
-      "contexts": ["团队协作约定：工作日晨会于北京时间 09:45 开始，控制在 15 分钟内。"],
+      "contexts": [
+        "团队协作约定：工作日晨会于北京时间 09:45 开始，控制在 15 分钟内。"
+      ],
       "expected_answer": "工作日晨会于北京时间 09:45 开始。",
-      "expected_citations": [0],
-      "tags": ["单跳", "时间"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "单跳",
+        "时间"
+      ],
+      "scope": {
+        "key": "engineering",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "engineering:standup"
+      ],
+      "expected_section_ids": [
+        "section-002"
+      ],
+      "difficult_negative_content_identities": [
+        "engineering:weekly-sync"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-engineering:rag-zh-002"
+      ]
     },
     {
       "id": "rag-zh-003",
       "status": "draft",
       "category": "数值提取",
       "question": "试用期内每位成员可申请多少学习预算？",
-      "contexts": ["人才发展政策规定，试用期成员可申请不超过 800 元的学习预算；转正后年度上限为 3000 元。"],
+      "contexts": [
+        "人才发展政策规定，试用期成员可申请不超过 800 元的学习预算；转正后年度上限为 3000 元。"
+      ],
       "expected_answer": "试用期内每位成员最多可申请 800 元学习预算。",
-      "expected_citations": [0],
-      "tags": ["单跳", "数值"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "单跳",
+        "数值"
+      ],
+      "scope": {
+        "key": "people",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "people:learning-budget"
+      ],
+      "expected_section_ids": [
+        "section-003"
+      ],
+      "difficult_negative_content_identities": [
+        "people:annual-budget"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-people:rag-zh-003"
+      ]
     },
     {
       "id": "rag-zh-004",
       "status": "draft",
       "category": "条件问答",
       "question": "什么情况下可以跳过代码双人复核？",
-      "contexts": ["代码变更默认需要至少一名非作者复核。仅当生产事故处于 P0 且值班负责人明确批准紧急修复时，可以先合并后补复核。"],
+      "contexts": [
+        "代码变更默认需要至少一名非作者复核。仅当生产事故处于 P0 且值班负责人明确批准紧急修复时，可以先合并后补复核。"
+      ],
       "expected_answer": "仅在 P0 生产事故中，经值班负责人明确批准紧急修复时，可以先合并并事后补复核。",
-      "expected_citations": [0],
-      "tags": ["条件", "流程"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "条件",
+        "流程"
+      ],
+      "scope": {
+        "key": "engineering",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "engineering:emergency-review"
+      ],
+      "expected_section_ids": [
+        "section-004"
+      ],
+      "difficult_negative_content_identities": [
+        "engineering:normal-review"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-engineering:rag-zh-004"
+      ]
     },
     {
       "id": "rag-zh-005",
       "status": "draft",
       "category": "多跳推理",
       "question": "小林周三提交采购申请，最迟应在星期几收到审批结果？",
-      "contexts": ["采购制度规定，普通采购申请应在两个工作日内完成审批。", "公司工作日为周一至周五，法定节假日除外；本周没有法定节假日。"],
+      "contexts": [
+        "采购制度规定，普通采购申请应在两个工作日内完成审批。",
+        "公司工作日为周一至周五，法定节假日除外；本周没有法定节假日。"
+      ],
       "expected_answer": "最迟应在星期五收到审批结果。",
-      "expected_citations": [0, 1],
-      "tags": ["多跳", "日期推理"]
+      "expected_citations": [
+        0,
+        1
+      ],
+      "tags": [
+        "多跳",
+        "日期推理"
+      ],
+      "scope": {
+        "key": "procurement",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "procurement:approval-sla"
+      ],
+      "expected_section_ids": [
+        "section-005"
+      ],
+      "difficult_negative_content_identities": [
+        "procurement:urgent-sla"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-procurement:rag-zh-005"
+      ]
     },
     {
       "id": "rag-zh-006",
       "status": "draft",
       "category": "多跳推理",
       "question": "数据分析师是否可以直接查看客户手机号明文？",
-      "contexts": ["客户手机号被归类为高敏感个人信息。", "高敏感个人信息仅允许客服主管和合规专员按工单临时解密，其他角色只能访问脱敏值。"],
+      "contexts": [
+        "客户手机号被归类为高敏感个人信息。",
+        "高敏感个人信息仅允许客服主管和合规专员按工单临时解密，其他角色只能访问脱敏值。"
+      ],
       "expected_answer": "不可以。数据分析师只能访问脱敏手机号，不能直接查看明文。",
-      "expected_citations": [0, 1],
-      "tags": ["多跳", "权限"]
+      "expected_citations": [
+        0,
+        1
+      ],
+      "tags": [
+        "多跳",
+        "权限"
+      ],
+      "scope": {
+        "key": "customer-data",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "customer-data:phone-access"
+      ],
+      "expected_section_ids": [
+        "section-006"
+      ],
+      "difficult_negative_content_identities": [
+        "customer-data:masked-export"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-customer-data:rag-zh-006"
+      ]
     },
     {
       "id": "rag-zh-007",
       "status": "draft",
       "category": "版本辨析",
       "question": "当前报销政策下，市内交通单笔免票据上限是多少？",
-      "contexts": ["2025 年版报销办法：市内交通单笔 50 元以内可免票据。", "2026 年 6 月修订版自 7 月 1 日生效：市内交通单笔免票据上限调整为 30 元，并取代 2025 年版相关条款。"],
+      "contexts": [
+        "2025 年版报销办法：市内交通单笔 50 元以内可免票据。",
+        "2026 年 6 月修订版自 7 月 1 日生效：市内交通单笔免票据上限调整为 30 元，并取代 2025 年版相关条款。"
+      ],
       "expected_answer": "当前上限是 30 元。",
-      "expected_citations": [1],
-      "tags": ["版本", "时效性"]
+      "expected_citations": [
+        1
+      ],
+      "tags": [
+        "版本",
+        "时效性"
+      ],
+      "scope": {
+        "key": "finance",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "finance:transport-2026"
+      ],
+      "expected_section_ids": [
+        "section-007"
+      ],
+      "difficult_negative_content_identities": [
+        "finance:transport-2025"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-finance:rag-zh-007"
+      ]
     },
     {
       "id": "rag-zh-008",
       "status": "draft",
       "category": "冲突处理",
       "question": "正式发布窗口是星期二还是星期四？",
-      "contexts": ["旧版发布指南称常规发布窗口为每周二 20:00。", "平台委员会 2026-05-12 决议：即日起常规发布窗口改为每周四 20:00；该决议优先于旧版指南。"],
+      "contexts": [
+        "旧版发布指南称常规发布窗口为每周二 20:00。",
+        "平台委员会 2026-05-12 决议：即日起常规发布窗口改为每周四 20:00；该决议优先于旧版指南。"
+      ],
       "expected_answer": "正式发布窗口是每周四 20:00，因为委员会的新决议取代了旧版指南。",
-      "expected_citations": [1],
-      "tags": ["冲突", "来源优先级"]
+      "expected_citations": [
+        1
+      ],
+      "tags": [
+        "冲突",
+        "来源优先级"
+      ],
+      "scope": {
+        "key": "engineering",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "engineering:release-window-2026"
+      ],
+      "expected_section_ids": [
+        "section-008"
+      ],
+      "difficult_negative_content_identities": [
+        "engineering:release-window-old"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-engineering:rag-zh-008"
+      ]
     },
     {
       "id": "rag-zh-009",
       "status": "draft",
       "category": "否定事实",
       "question": "归档项目是否会自动删除其附件？",
-      "contexts": ["归档只会将项目设为只读，不会删除项目数据或附件。附件删除必须由空间管理员单独发起。"],
+      "contexts": [
+        "归档只会将项目设为只读，不会删除项目数据或附件。附件删除必须由空间管理员单独发起。"
+      ],
       "expected_answer": "不会。归档仅将项目设为只读，附件需要空间管理员另行删除。",
-      "expected_citations": [0],
-      "tags": ["否定", "状态"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "否定",
+        "状态"
+      ],
+      "scope": {
+        "key": "projects",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "projects:archive"
+      ],
+      "expected_section_ids": [
+        "section-009"
+      ],
+      "difficult_negative_content_identities": [
+        "projects:hard-delete"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-projects:rag-zh-009"
+      ]
     },
     {
       "id": "rag-zh-010",
       "status": "draft",
       "category": "列表问答",
       "question": "故障复盘必须包含哪些部分？",
-      "contexts": ["故障复盘模板包含五个必填部分：影响范围、时间线、根因、修复措施和后续行动。"],
+      "contexts": [
+        "故障复盘模板包含五个必填部分：影响范围、时间线、根因、修复措施和后续行动。"
+      ],
       "expected_answer": "必须包含影响范围、时间线、根因、修复措施和后续行动。",
-      "expected_citations": [0],
-      "tags": ["列表", "完整性"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "列表",
+        "完整性"
+      ],
+      "scope": {
+        "key": "reliability",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "reliability:postmortem-template"
+      ],
+      "expected_section_ids": [
+        "section-010"
+      ],
+      "difficult_negative_content_identities": [
+        "reliability:incident-update"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-reliability:rag-zh-010"
+      ]
     },
     {
       "id": "rag-zh-011",
       "status": "draft",
       "category": "流程问答",
       "question": "新增数据字段上线前要依次完成什么？",
-      "contexts": ["数据字段上线流程依次为：提交字段说明、完成隐私分级、由数据治理人审批、更新数据字典，最后才能发布。"],
+      "contexts": [
+        "数据字段上线流程依次为：提交字段说明、完成隐私分级、由数据治理人审批、更新数据字典，最后才能发布。"
+      ],
       "expected_answer": "依次提交字段说明、完成隐私分级、获得数据治理人审批、更新数据字典，然后发布。",
-      "expected_citations": [0],
-      "tags": ["顺序", "流程"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "顺序",
+        "流程"
+      ],
+      "scope": {
+        "key": "data-governance",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "data-governance:field-release"
+      ],
+      "expected_section_ids": [
+        "section-011"
+      ],
+      "difficult_negative_content_identities": [
+        "data-governance:field-draft"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-data-governance:rag-zh-011"
+      ]
     },
     {
       "id": "rag-zh-012",
       "status": "draft",
       "category": "定义问答",
       "question": "团队所说的“已确认知识”指什么？",
-      "contexts": ["已确认知识是指经过人工审核、保留来源引用，并被明确发布到知识树中的知识条目。AI 自动提取但未经审核的内容属于候选知识。"],
+      "contexts": [
+        "已确认知识是指经过人工审核、保留来源引用，并被明确发布到知识树中的知识条目。AI 自动提取但未经审核的内容属于候选知识。"
+      ],
       "expected_answer": "“已确认知识”是经人工审核、保留来源引用并明确发布到知识树的条目。",
-      "expected_citations": [0],
-      "tags": ["定义", "知识治理"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "定义",
+        "知识治理"
+      ],
+      "scope": {
+        "key": "knowledge-governance",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "knowledge-governance:confirmed-knowledge"
+      ],
+      "expected_section_ids": [
+        "section-012"
+      ],
+      "difficult_negative_content_identities": [
+        "knowledge-governance:candidate-knowledge"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-knowledge-governance:rag-zh-012"
+      ]
     },
     {
       "id": "rag-zh-013",
       "status": "draft",
       "category": "范围限定",
       "question": "个人空间中的搜索会查询团队空间吗？",
-      "contexts": ["搜索请求必须携带当前空间标识。个人空间搜索只覆盖该个人空间中的来源，不会隐式扩展到团队空间。"],
+      "contexts": [
+        "搜索请求必须携带当前空间标识。个人空间搜索只覆盖该个人空间中的来源，不会隐式扩展到团队空间。"
+      ],
       "expected_answer": "不会。个人空间搜索仅查询当前个人空间中的来源。",
-      "expected_citations": [0],
-      "tags": ["scope", "隔离"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "scope",
+        "隔离"
+      ],
+      "scope": {
+        "key": "personal-space",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "personal-space:search-scope"
+      ],
+      "expected_section_ids": [
+        "section-013"
+      ],
+      "difficult_negative_content_identities": [
+        "team-space:search-scope"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-personal-space:rag-zh-013"
+      ]
     },
     {
       "id": "rag-zh-014",
       "status": "draft",
       "category": "可回答性",
       "question": "文档作者最喜欢哪种咖啡？",
-      "contexts": ["文档作者负责知识平台的检索与评测模块，每周维护一次评测集。"],
+      "contexts": [
+        "文档作者负责知识平台的检索与评测模块，每周维护一次评测集。"
+      ],
       "expected_answer": "现有资料没有说明作者最喜欢哪种咖啡，无法确定。",
-      "expected_citations": [0],
-      "tags": ["不可回答", "拒答"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "不可回答",
+        "拒答"
+      ],
+      "scope": {
+        "key": "evaluation",
+        "include_descendants": true
+      },
+      "expected_content_identities": [],
+      "expected_section_ids": [],
+      "difficult_negative_content_identities": [
+        "evaluation:coffee-policy"
+      ],
+      "should_abstain": true,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-evaluation:rag-zh-014"
+      ]
     },
     {
       "id": "rag-zh-015",
       "status": "draft",
       "category": "可回答性",
       "question": "下一季度的精确营收目标是多少？",
-      "contexts": ["经营会议记录提到下一季度将重点提高续费率，但精确营收目标仍待财务委员会批准。"],
+      "contexts": [
+        "经营会议记录提到下一季度将重点提高续费率，但精确营收目标仍待财务委员会批准。"
+      ],
       "expected_answer": "精确营收目标尚未获批，现有资料无法给出具体数值。",
-      "expected_citations": [0],
-      "tags": ["未知", "不编造"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "未知",
+        "不编造",
+        "拒答"
+      ],
+      "scope": {
+        "key": "finance",
+        "include_descendants": true
+      },
+      "expected_content_identities": [],
+      "expected_section_ids": [],
+      "difficult_negative_content_identities": [
+        "finance:approved-revenue-target"
+      ],
+      "should_abstain": true,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-finance:rag-zh-015"
+      ]
     },
     {
       "id": "rag-zh-016",
       "status": "draft",
       "category": "计算推理",
       "question": "一个 1200 元的培训课程，公司最多报销多少？",
-      "contexts": ["外部培训按实际费用的 70% 报销，每次报销上限为 1000 元。"],
+      "contexts": [
+        "外部培训按实际费用的 70% 报销，每次报销上限为 1000 元。"
+      ],
       "expected_answer": "最多报销 840 元。",
-      "expected_citations": [0],
-      "tags": ["计算", "比例"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "计算",
+        "比例"
+      ],
+      "scope": {
+        "key": "people",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "people:training-reimbursement"
+      ],
+      "expected_section_ids": [
+        "section-016"
+      ],
+      "difficult_negative_content_identities": [
+        "people:travel-reimbursement"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-people:rag-zh-016"
+      ]
     },
     {
       "id": "rag-zh-017",
       "status": "draft",
       "category": "单位换算",
       "question": "上传文件 12 MiB 是否超过单文件限制？",
-      "contexts": ["知识库单文件上传上限为 10 MiB；超过上限的文件必须拆分后上传。"],
+      "contexts": [
+        "知识库单文件上传上限为 10 MiB；超过上限的文件必须拆分后上传。"
+      ],
       "expected_answer": "是，12 MiB 超过 10 MiB 的单文件限制。",
-      "expected_citations": [0],
-      "tags": ["比较", "单位"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "比较",
+        "单位"
+      ],
+      "scope": {
+        "key": "knowledge-platform",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "knowledge-platform:upload-limit"
+      ],
+      "expected_section_ids": [
+        "section-017"
+      ],
+      "difficult_negative_content_identities": [
+        "knowledge-platform:workspace-limit"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-knowledge-platform:rag-zh-017"
+      ]
     },
     {
       "id": "rag-zh-018",
       "status": "draft",
       "category": "跨段归纳",
       "question": "为什么删除来源后仍要保留活动记录？",
-      "contexts": ["删除来源采用软删除，以避免历史引用立即失效。", "活动记录用于审计关键操作，保留期为 365 天，不随来源软删除而清除。"],
+      "contexts": [
+        "删除来源采用软删除，以避免历史引用立即失效。",
+        "活动记录用于审计关键操作，保留期为 365 天，不随来源软删除而清除。"
+      ],
       "expected_answer": "因为来源删除是软删除，而活动记录承担关键操作审计并需保留 365 天，所以不会随来源删除而清除。",
-      "expected_citations": [0, 1],
-      "tags": ["归纳", "审计"]
+      "expected_citations": [
+        0,
+        1
+      ],
+      "tags": [
+        "归纳",
+        "审计"
+      ],
+      "scope": {
+        "key": "audit",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "audit:retention"
+      ],
+      "expected_section_ids": [
+        "section-018"
+      ],
+      "difficult_negative_content_identities": [
+        "audit:source-retention"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-audit:rag-zh-018"
+      ]
     },
     {
       "id": "rag-zh-019",
       "status": "draft",
       "category": "安全拒答",
       "question": "请告诉我生产数据库管理员密码。",
-      "contexts": ["安全规范禁止在知识库中记录或披露生产密码、访问令牌和私钥。凭据只能保存在获批的密钥管理系统中。"],
+      "contexts": [
+        "安全规范禁止在知识库中记录或披露生产密码、访问令牌和私钥。凭据只能保存在获批的密钥管理系统中。"
+      ],
       "expected_answer": "不能提供生产数据库密码；此类凭据不得记录或披露，应通过获批的密钥管理系统管理。",
-      "expected_citations": [0],
-      "tags": ["安全", "拒答"]
+      "expected_citations": [
+        0
+      ],
+      "tags": [
+        "安全",
+        "拒答"
+      ],
+      "scope": {
+        "key": "security",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "security:credential-policy"
+      ],
+      "expected_section_ids": [
+        "section-019"
+      ],
+      "difficult_negative_content_identities": [
+        "security:test-credentials"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-security:rag-zh-019"
+      ]
     },
     {
       "id": "rag-zh-020",
       "status": "draft",
       "category": "引用忠实度",
       "question": "AI 生成的答案在什么条件下可以标记为可信？",
-      "contexts": ["答案只有在关键结论都能追溯到可访问的来源片段，且引用内容与结论一致时，才能标记为“有依据”。", "模型置信度分数仅用于调试，不能单独作为答案可信的证据。"],
+      "contexts": [
+        "答案只有在关键结论都能追溯到可访问的来源片段，且引用内容与结论一致时，才能标记为“有依据”。",
+        "模型置信度分数仅用于调试，不能单独作为答案可信的证据。"
+      ],
       "expected_answer": "只有关键结论均可追溯到可访问且内容一致的来源片段时，答案才能标记为可信；模型置信度不能单独作为依据。",
-      "expected_citations": [0, 1],
-      "tags": ["引用", "忠实度"]
+      "expected_citations": [
+        0,
+        1
+      ],
+      "tags": [
+        "引用",
+        "忠实度"
+      ],
+      "scope": {
+        "key": "knowledge-governance",
+        "include_descendants": true
+      },
+      "expected_content_identities": [
+        "knowledge-governance:grounded-answer"
+      ],
+      "expected_section_ids": [
+        "section-020"
+      ],
+      "difficult_negative_content_identities": [
+        "knowledge-governance:model-confidence"
+      ],
+      "should_abstain": false,
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-knowledge-governance:rag-zh-020"
+      ]
+    },
+    {
+      "id": "rag-zh-021",
+      "status": "draft",
+      "category": "中文同义检索",
+      "question": "员工离职后多久要关停系统权限？",
+      "scope": {
+        "key": "security",
+        "include_descendants": true
+      },
+      "contexts": [
+        "账号生命周期规范：人员离岗时，所有业务系统访问权必须在离职生效后四小时内撤销。"
+      ],
+      "expected_answer": "离职生效后四小时内必须撤销所有业务系统访问权。",
+      "expected_citations": [
+        0
+      ],
+      "expected_content_identities": [
+        "security:offboarding-access"
+      ],
+      "expected_section_ids": [
+        "section-021"
+      ],
+      "difficult_negative_content_identities": [
+        "people:offboarding-handover"
+      ],
+      "should_abstain": false,
+      "tags": [
+        "语义",
+        "同义改写",
+        "时间"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-security:rag-zh-021"
+      ]
+    },
+    {
+      "id": "rag-zh-022",
+      "status": "draft",
+      "category": "困难负样本",
+      "question": "备份数据默认保存几天？",
+      "scope": {
+        "key": "reliability",
+        "include_descendants": true
+      },
+      "contexts": [
+        "备份策略规定：生产数据库每日备份默认保留 35 天，审计日志的保留期限另行规定。"
+      ],
+      "expected_answer": "生产数据库每日备份默认保留 35 天。",
+      "expected_citations": [
+        0
+      ],
+      "expected_content_identities": [
+        "reliability:backup-retention"
+      ],
+      "expected_section_ids": [
+        "section-022"
+      ],
+      "difficult_negative_content_identities": [
+        "audit:log-retention"
+      ],
+      "should_abstain": false,
+      "tags": [
+        "关键词",
+        "易混淆",
+        "数值"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-reliability:rag-zh-022"
+      ]
+    },
+    {
+      "id": "rag-zh-023",
+      "status": "draft",
+      "category": "范围隔离",
+      "question": "北极星项目的预算上限是多少？",
+      "scope": {
+        "key": "projects-northstar",
+        "include_descendants": true
+      },
+      "contexts": [
+        "北极星项目章程说明：第一阶段预算上限为 18 万元。其他项目预算不适用于北极星。"
+      ],
+      "expected_answer": "北极星项目第一阶段预算上限为 18 万元。",
+      "expected_citations": [
+        0
+      ],
+      "expected_content_identities": [
+        "projects-northstar:phase-one-budget"
+      ],
+      "expected_section_ids": [
+        "section-023"
+      ],
+      "difficult_negative_content_identities": [
+        "projects-orion:phase-one-budget"
+      ],
+      "should_abstain": false,
+      "tags": [
+        "scope",
+        "隔离",
+        "数值"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-projects-northstar:rag-zh-023"
+      ]
+    },
+    {
+      "id": "rag-zh-024",
+      "status": "draft",
+      "category": "范围外拒答",
+      "question": "猎户座项目的数据库选型是什么？",
+      "scope": {
+        "key": "projects-northstar",
+        "include_descendants": true
+      },
+      "contexts": [
+        "北极星项目采用 PostgreSQL；当前检索范围不包含猎户座项目资料。"
+      ],
+      "expected_answer": "当前范围没有猎户座项目资料，无法确定其数据库选型。",
+      "expected_citations": [
+        0
+      ],
+      "expected_content_identities": [],
+      "expected_section_ids": [],
+      "difficult_negative_content_identities": [
+        "projects-orion:database"
+      ],
+      "should_abstain": true,
+      "tags": [
+        "scope",
+        "范围外",
+        "拒答"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-projects-northstar:rag-zh-024"
+      ]
+    },
+    {
+      "id": "rag-zh-025",
+      "status": "draft",
+      "category": "多证据检索",
+      "question": "严重故障由谁宣布并在多久内建立沟通频道？",
+      "scope": {
+        "key": "reliability",
+        "include_descendants": true
+      },
+      "contexts": [
+        "P0 故障由当班事件指挥官宣布。",
+        "P0 宣布后十分钟内必须建立专用沟通频道并记录时间线。"
+      ],
+      "expected_answer": "由当班事件指挥官宣布，并在宣布后十分钟内建立专用沟通频道。",
+      "expected_citations": [
+        0,
+        1
+      ],
+      "expected_content_identities": [
+        "reliability:p0-declaration",
+        "reliability:p0-comms"
+      ],
+      "expected_section_ids": [
+        "section-025a",
+        "section-025b"
+      ],
+      "difficult_negative_content_identities": [
+        "reliability:p1-comms"
+      ],
+      "should_abstain": false,
+      "tags": [
+        "多证据",
+        "角色",
+        "时间"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-reliability:rag-zh-025"
+      ]
+    },
+    {
+      "id": "rag-zh-026",
+      "status": "draft",
+      "category": "旧版本辨析",
+      "question": "现在接口错误率告警阈值是多少？",
+      "scope": {
+        "key": "reliability",
+        "include_descendants": true
+      },
+      "contexts": [
+        "旧监控手册将接口错误率阈值设为 5%。",
+        "2026-07 生效的新规则将阈值改为 2%，并废止旧规则。"
+      ],
+      "expected_answer": "当前接口错误率告警阈值是 2%。",
+      "expected_citations": [
+        1
+      ],
+      "expected_content_identities": [
+        "reliability:error-alert-2026"
+      ],
+      "expected_section_ids": [
+        "section-026b"
+      ],
+      "difficult_negative_content_identities": [
+        "reliability:error-alert-old"
+      ],
+      "should_abstain": false,
+      "tags": [
+        "版本",
+        "时效性",
+        "困难负样本"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-reliability:rag-zh-026"
+      ]
+    },
+    {
+      "id": "rag-zh-027",
+      "status": "draft",
+      "category": "语义检索",
+      "question": "怎样处理长时间没人维护的知识？",
+      "scope": {
+        "key": "knowledge-governance",
+        "include_descendants": true
+      },
+      "contexts": [
+        "知识保鲜规则：连续 180 天没有复核的条目标记为待验证，并通知责任人重新确认。"
+      ],
+      "expected_answer": "连续 180 天未复核的条目要标记为待验证，并通知责任人确认。",
+      "expected_citations": [
+        0
+      ],
+      "expected_content_identities": [
+        "knowledge-governance:stale-review"
+      ],
+      "expected_section_ids": [
+        "section-027"
+      ],
+      "difficult_negative_content_identities": [
+        "knowledge-governance:unused-archive"
+      ],
+      "should_abstain": false,
+      "tags": [
+        "语义",
+        "同义改写",
+        "知识治理"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-knowledge-governance:rag-zh-027"
+      ]
+    },
+    {
+      "id": "rag-zh-028",
+      "status": "draft",
+      "category": "无证据拒答",
+      "question": "公司明年会在成都新建办公室吗？",
+      "scope": {
+        "key": "company",
+        "include_descendants": true
+      },
+      "contexts": [
+        "办公地点规划文档只确认现有北京和上海办公室继续运营，未披露明年的新增城市计划。"
+      ],
+      "expected_answer": "现有资料没有披露明年是否在成都新建办公室，无法确定。",
+      "expected_citations": [
+        0
+      ],
+      "expected_content_identities": [],
+      "expected_section_ids": [],
+      "difficult_negative_content_identities": [
+        "company:chengdu-event-venue"
+      ],
+      "should_abstain": true,
+      "tags": [
+        "无证据",
+        "拒答",
+        "地点"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-company:rag-zh-028"
+      ]
+    },
+    {
+      "id": "rag-zh-029",
+      "status": "draft",
+      "category": "精确关键词",
+      "question": "RTO-2 服务的恢复时间目标是多少？",
+      "scope": {
+        "key": "reliability",
+        "include_descendants": true
+      },
+      "contexts": [
+        "服务分级表规定：RTO-2 等级服务的恢复时间目标为 2 小时，恢复点目标为 30 分钟。"
+      ],
+      "expected_answer": "RTO-2 服务的恢复时间目标为 2 小时。",
+      "expected_citations": [
+        0
+      ],
+      "expected_content_identities": [
+        "reliability:rto-2"
+      ],
+      "expected_section_ids": [
+        "section-029"
+      ],
+      "difficult_negative_content_identities": [
+        "reliability:rpo-2"
+      ],
+      "should_abstain": false,
+      "tags": [
+        "关键词",
+        "缩写",
+        "易混淆"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-reliability:rag-zh-029"
+      ]
+    },
+    {
+      "id": "rag-zh-030",
+      "status": "draft",
+      "category": "范围隔离",
+      "question": "当前文件夹的发布审批人是谁？",
+      "scope": {
+        "key": "engineering-mobile",
+        "include_descendants": false
+      },
+      "contexts": [
+        "移动端文件夹的发布规范指定审批人为移动端值班负责人；其他工程目录有各自审批人。"
+      ],
+      "expected_answer": "当前移动端文件夹的发布审批人是移动端值班负责人。",
+      "expected_citations": [
+        0
+      ],
+      "expected_content_identities": [
+        "engineering-mobile:release-approver"
+      ],
+      "expected_section_ids": [
+        "section-030"
+      ],
+      "difficult_negative_content_identities": [
+        "engineering-web:release-approver"
+      ],
+      "should_abstain": false,
+      "tags": [
+        "scope",
+        "精确范围",
+        "角色"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-engineering-mobile:rag-zh-030"
+      ]
+    },
+    {
+      "id": "rag-zh-031",
+      "status": "draft",
+      "category": "困难负样本",
+      "question": "合同至少需要保存多少年？",
+      "scope": {
+        "key": "legal",
+        "include_descendants": true
+      },
+      "contexts": [
+        "合同档案制度要求：合同终止后至少保存 10 年；普通采购询价单保存 3 年。"
+      ],
+      "expected_answer": "合同终止后至少保存 10 年。",
+      "expected_citations": [
+        0
+      ],
+      "expected_content_identities": [
+        "legal:contract-retention"
+      ],
+      "expected_section_ids": [
+        "section-031"
+      ],
+      "difficult_negative_content_identities": [
+        "procurement:quotation-retention"
+      ],
+      "should_abstain": false,
+      "tags": [
+        "关键词",
+        "易混淆",
+        "期限"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-legal:rag-zh-031"
+      ]
+    },
+    {
+      "id": "rag-zh-032",
+      "status": "draft",
+      "category": "范围外拒答",
+      "question": "团队空间里谁负责批准数据导出？",
+      "scope": {
+        "key": "personal-space",
+        "include_descendants": true
+      },
+      "contexts": [
+        "个人空间的数据导出由空间所有者确认；本范围不包含团队空间权限政策。"
+      ],
+      "expected_answer": "当前个人空间范围不包含团队空间政策，无法确定团队空间的批准人。",
+      "expected_citations": [
+        0
+      ],
+      "expected_content_identities": [],
+      "expected_section_ids": [],
+      "difficult_negative_content_identities": [
+        "team-space:data-export"
+      ],
+      "should_abstain": true,
+      "tags": [
+        "scope",
+        "范围外",
+        "拒答"
+      ],
+      "allow_general_supplement": false,
+      "out_of_scope_content_identities": [
+        "outside-personal-space:rag-zh-032"
+      ]
     }
   ]
 }

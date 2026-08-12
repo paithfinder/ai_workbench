@@ -6,10 +6,15 @@ from collections.abc import AsyncIterator
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from knowledge_workbench.application.knowledge_import import (
+    KnowledgeImportCreate,
+    KnowledgeImportService,
+    prepare_knowledge_import,
+)
 from knowledge_workbench.application.knowledge_tree import (
     KnowledgeNodeCreate,
     KnowledgeNodeDelete,
@@ -19,10 +24,13 @@ from knowledge_workbench.application.knowledge_tree import (
 )
 from knowledge_workbench.config import Settings
 from knowledge_workbench.db.models import (
+    Job,
     KnowledgeEvidence,
     KnowledgeNode,
     KnowledgeNodeKind,
     KnowledgeRevision,
+    OutboxEvent,
+    RetrievalIndexRun,
     Source,
     SourceKind,
     SourceParseArtifact,
@@ -84,6 +92,132 @@ async def _root(session: AsyncSession) -> KnowledgeNode:
     )
     assert root is not None
     return root
+
+
+async def test_direct_folder_import_is_atomic_replayable_and_side_effect_free(
+    postgres_session: AsyncSession,
+) -> None:
+    import_table = await postgres_session.scalar(
+        text("SELECT to_regclass('public.knowledge_import_requests')")
+    )
+    if import_table is None:
+        pytest.skip("PostgreSQL is not migrated through direct knowledge import")
+    root = await _root(postgres_session)
+    service = KnowledgeImportService()
+    key = f"knowledge-import-{uuid4()}"
+    request = KnowledgeImportCreate(
+        parent_id=None,
+        expected_parent_version=root.version,
+        root_name="人工知识库",
+        documents=[
+            {"relative_path": "编程/Python/异步.md", "body": "# 异步\n正文"},
+            {"relative_path": "产品/需求.txt", "body": "需求正文"},
+        ],
+    )
+    before = {
+        "sources": await postgres_session.scalar(select(func.count()).select_from(Source)),
+        "jobs": await postgres_session.scalar(select(func.count()).select_from(Job)),
+        "outbox": await postgres_session.scalar(select(func.count()).select_from(OutboxEvent)),
+        "indexes": await postgres_session.scalar(
+            select(func.count()).select_from(RetrievalIndexRun)
+        ),
+    }
+
+    outcome = await service.create(
+        postgres_session,
+        space_id=DEFAULT_SPACE_ID,
+        idempotency_key=key,
+        request=request,
+        settings=Settings(app_env="test"),
+    )
+    replay = await service.create(
+        postgres_session,
+        space_id=DEFAULT_SPACE_ID,
+        idempotency_key=key,
+        request=request,
+        settings=Settings(app_env="test"),
+    )
+
+    assert replay == outcome
+    assert outcome.folder_count == 4
+    assert outcome.document_count == 2
+    imported = list(
+        await postgres_session.scalars(
+            select(KnowledgeNode)
+            .where(KnowledgeNode.path.op("<@")(f"{root.path}.n{outcome.root_node_id.hex}"))
+            .order_by(KnowledgeNode.path)
+        )
+    )
+    assert len(imported) == 6
+    revisions = list(
+        await postgres_session.scalars(
+            select(KnowledgeRevision).where(
+                KnowledgeRevision.node_id.in_([item.id for item in imported])
+            )
+        )
+    )
+    assert len(revisions) == 6
+    assert next(item for item in revisions if item.title == "异步.md").body == "# 异步\n正文"
+    assert [item.relative_path for item in outcome.items] == [
+        ".",
+        "产品",
+        "编程",
+        "编程/Python",
+        "产品/需求.txt",
+        "编程/Python/异步.md",
+    ]
+    after = {
+        "sources": await postgres_session.scalar(select(func.count()).select_from(Source)),
+        "jobs": await postgres_session.scalar(select(func.count()).select_from(Job)),
+        "outbox": await postgres_session.scalar(select(func.count()).select_from(OutboxEvent)),
+        "indexes": await postgres_session.scalar(
+            select(func.count()).select_from(RetrievalIndexRun)
+        ),
+    }
+    assert after == before
+
+
+async def test_direct_folder_import_rolls_back_the_whole_batch(
+    postgres_session: AsyncSession,
+) -> None:
+    import_table = await postgres_session.scalar(
+        text("SELECT to_regclass('public.knowledge_import_requests')")
+    )
+    if import_table is None:
+        pytest.skip("PostgreSQL is not migrated through direct knowledge import")
+    root = await _root(postgres_session)
+    settings = Settings(app_env="test")
+    request = KnowledgeImportCreate(
+        parent_id=None,
+        expected_parent_version=root.version,
+        root_name="回滚知识库",
+        documents=[{"relative_path": "README.md", "body": "正文"}],
+    )
+    prepared = prepare_knowledge_import(request, settings=settings)
+    before = await postgres_session.scalar(
+        select(func.count()).select_from(KnowledgeNode)
+    )
+
+    try:
+        async with postgres_session.begin_nested():
+            await KnowledgeImportService().create(
+                postgres_session,
+                space_id=DEFAULT_SPACE_ID,
+                idempotency_key=f"rollback-import-{uuid4()}",
+                request=request,
+                settings=settings,
+            )
+            raise RuntimeError("simulate failure before commit")
+    except RuntimeError:
+        pass
+
+    after = await postgres_session.scalar(select(func.count()).select_from(KnowledgeNode))
+    assert after == before
+    assert await postgres_session.scalar(
+        select(func.count())
+        .select_from(KnowledgeRevision)
+        .where(KnowledgeRevision.title == prepared.root_name)
+    ) == 0
 
 
 async def test_tree_writes_replay_move_search_and_soft_delete(

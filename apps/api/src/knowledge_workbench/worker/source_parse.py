@@ -12,6 +12,7 @@ from minio import Minio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from knowledge_workbench.application.indexing import IndexingService
 from knowledge_workbench.application.ports.document_parser import (
     DocumentParseError,
     DocumentParser,
@@ -58,11 +59,13 @@ class SourceParseWorker(JobRunner):
         parser: DocumentParser,
         storage: ObjectStorage,
         heartbeat_session_factory: async_sessionmaker[AsyncSession] | None = None,
+        indexing_service: IndexingService | None = None,
     ) -> None:
         super().__init__(settings, JobKind.SOURCE_PARSE)
         self._parser = parser
         self._storage = storage
         self._heartbeat_sessions = heartbeat_session_factory
+        self._indexing = indexing_service or IndexingService()
         self._parsed: dict[UUID, tuple[UUID, object]] = {}
 
     async def _run_claimed(
@@ -334,6 +337,13 @@ class SourceParseWorker(JobRunner):
             db_artifact.completed_at = now
             db_version.current_parse_artifact_id = db_artifact.id
             db_version.parse_status = ParseStatus.READY.value
+            await self._indexing.request_source_rebuild(
+                session,
+                settings=self._settings,
+                space_id=source.space_id,
+                source_version_id=db_version.id,
+                idempotency_key=f"parse-ready:{db_artifact.id}",
+            )
             job.status = JobStatus.SUCCEEDED.value
             job.progress = 100
             job.retryable = False
