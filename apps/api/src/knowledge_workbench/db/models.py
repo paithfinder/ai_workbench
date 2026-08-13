@@ -132,6 +132,13 @@ class CorpusKind(StrEnum):
     SOURCE_EVIDENCE = "source_evidence"
 
 
+class QaTurnStatus(StrEnum):
+    PROCESSING = "processing"
+    ANSWERED = "answered"
+    ABSTAINED = "abstained"
+    FAILED = "failed"
+
+
 class JobAttemptStatus(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
@@ -1276,6 +1283,254 @@ class RetrievalChunk(Base):
         JSONB, nullable=False, default=dict, server_default=sql_text("'{}'::jsonb")
     )
     embedding: Mapped[list[float]] = mapped_column(Vector(1024), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class QaTurn(TimestampMixin, Base):
+    __tablename__ = "qa_turns"
+    __table_args__ = (
+        UniqueConstraint("space_id", "idempotency_key", name="uq_qa_turns_space_key"),
+        UniqueConstraint("id", "space_id", name="uq_qa_turns_id_space"),
+        ForeignKeyConstraint(
+            ["scope_node_id", "space_id"],
+            ["knowledge_nodes.id", "knowledge_nodes.space_id"],
+            name="fk_qa_turns_scope_space",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("request_hash ~ '^[0-9a-f]{64}$'", name="ck_qa_turns_request_hash"),
+        CheckConstraint(
+            "scope_snapshot_hash ~ '^[0-9a-f]{64}$'", name="ck_qa_turns_scope_hash"
+        ),
+        CheckConstraint("length(btrim(question)) > 0", name="ck_qa_turns_question"),
+        CheckConstraint(
+            "status IN ('processing','answered','abstained','failed')",
+            name="ck_qa_turns_status",
+        ),
+        CheckConstraint(
+            "input_tokens >= 0 AND output_tokens >= 0", name="ck_qa_turns_tokens"
+        ),
+        CheckConstraint(
+            "jsonb_typeof(claims) = 'array'",
+            name="ck_qa_turns_claims_array",
+        ),
+        CheckConstraint(
+            "(status = 'answered' AND jsonb_array_length(claims) > 0) OR "
+            "(status <> 'answered' AND jsonb_array_length(claims) = 0)",
+            name="ck_qa_turns_claims_shape",
+        ),
+        CheckConstraint(
+            "(status = 'processing' AND answer IS NULL AND abstain_code IS NULL "
+            "AND error_code IS NULL AND error_message IS NULL AND completed_at IS NULL) OR "
+            "(status = 'answered' AND answer IS NOT NULL AND length(btrim(answer)) > 0 "
+            "AND abstain_code IS NULL AND error_code IS NULL AND completed_at IS NOT NULL) OR "
+            "(status = 'abstained' AND answer IS NULL AND abstain_code IS NOT NULL "
+            "AND error_code IS NULL AND completed_at IS NOT NULL) OR "
+            "(status = 'failed' AND answer IS NULL AND abstain_code IS NULL "
+            "AND error_code IS NOT NULL AND completed_at IS NOT NULL)",
+            name="ck_qa_turns_result_shape",
+        ),
+        Index("ix_qa_turns_space_created", "space_id", "created_at"),
+        Index("ix_qa_turns_space_status", "space_id", "status", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    scope_node_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    include_descendants: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    scope_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    scope_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    index_config_version: Mapped[str | None] = mapped_column(String(100))
+    retrieval_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    reranker_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    context_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    ai_provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    ai_model: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default=QaTurnStatus.PROCESSING)
+    answer: Mapped[str | None] = mapped_column(Text)
+    claims: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    abstain_code: Mapped[str | None] = mapped_column(String(100))
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    error_message: Mapped[str | None] = mapped_column(String(2000))
+    input_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    output_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    timings_ms: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=sql_text("'{}'::jsonb")
+    )
+    warnings: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class QaRetrievalHit(Base):
+    __tablename__ = "qa_retrieval_hits"
+    __table_args__ = (
+        UniqueConstraint("turn_id", "chunk_id", name="uq_qa_retrieval_hits_turn_chunk"),
+        UniqueConstraint("id", "turn_id", name="uq_qa_retrieval_hits_id_turn"),
+        UniqueConstraint(
+            "id", "turn_id", "evidence_id", name="uq_qa_retrieval_hits_id_turn_evidence"
+        ),
+        UniqueConstraint("turn_id", "evidence_id", name="uq_qa_retrieval_hits_turn_evidence"),
+        CheckConstraint(
+            "corpus_kind IN ('source_evidence','confirmed_knowledge')",
+            name="ck_qa_retrieval_hits_corpus",
+        ),
+        CheckConstraint(
+            "content_identity ~ '^[0-9a-f]{64}$' AND content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_qa_retrieval_hits_hashes",
+        ),
+        CheckConstraint("length(chunk_text) > 0", name="ck_qa_retrieval_hits_text"),
+        CheckConstraint(
+            "(keyword_rank IS NULL OR keyword_rank > 0) "
+            "AND (vector_rank IS NULL OR vector_rank > 0) "
+            "AND rrf_rank > 0 AND (rerank_rank IS NULL OR rerank_rank > 0)",
+            name="ck_qa_retrieval_hits_ranks",
+        ),
+        CheckConstraint(
+            "rrf_score NOT IN ('NaN'::double precision, 'Infinity'::double precision, "
+            "'-Infinity'::double precision) "
+            "AND (keyword_score IS NULL OR keyword_score NOT IN "
+            "('NaN'::double precision, 'Infinity'::double precision, "
+            "'-Infinity'::double precision)) "
+            "AND (vector_score IS NULL OR vector_score NOT IN "
+            "('NaN'::double precision, 'Infinity'::double precision, "
+            "'-Infinity'::double precision)) "
+            "AND (rerank_score IS NULL OR rerank_score NOT IN "
+            "('NaN'::double precision, 'Infinity'::double precision, "
+            "'-Infinity'::double precision))",
+            name="ck_qa_retrieval_hits_scores",
+        ),
+        CheckConstraint(
+            "(included_in_context AND context_ordinal IS NOT NULL "
+            "AND context_ordinal >= 0 AND evidence_id IS NOT NULL) OR "
+            "(NOT included_in_context AND context_ordinal IS NULL AND evidence_id IS NULL)",
+            name="ck_qa_retrieval_hits_context",
+        ),
+        CheckConstraint(
+            "(corpus_kind = 'source_evidence' AND source_id IS NOT NULL "
+            "AND source_version_id IS NOT NULL AND parse_artifact_id IS NOT NULL "
+            "AND section_id IS NOT NULL AND knowledge_node_id IS NULL "
+            "AND knowledge_revision_id IS NULL) OR "
+            "(corpus_kind = 'confirmed_knowledge' AND knowledge_node_id IS NOT NULL "
+            "AND knowledge_revision_id IS NOT NULL AND source_id IS NULL "
+            "AND source_version_id IS NULL AND parse_artifact_id IS NULL AND section_id IS NULL)",
+            name="ck_qa_retrieval_hits_identity_shape",
+        ),
+        Index("ix_qa_retrieval_hits_turn_rank", "turn_id", "rrf_rank"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    turn_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("qa_turns.id", ondelete="CASCADE"), nullable=False
+    )
+    chunk_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    corpus_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    content_identity: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(1000))
+    chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    heading_path: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    locator: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    knowledge_node_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    knowledge_revision_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    source_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    source_version_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    parse_artifact_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    section_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    keyword_rank: Mapped[int | None] = mapped_column(Integer)
+    keyword_score: Mapped[float | None] = mapped_column(Float)
+    vector_rank: Mapped[int | None] = mapped_column(Integer)
+    vector_score: Mapped[float | None] = mapped_column(Float)
+    rrf_rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    rrf_score: Mapped[float] = mapped_column(Float, nullable=False)
+    rerank_rank: Mapped[int | None] = mapped_column(Integer)
+    rerank_score: Mapped[float | None] = mapped_column(Float)
+    included_in_context: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sql_text("false")
+    )
+    context_ordinal: Mapped[int | None] = mapped_column(Integer)
+    evidence_id: Mapped[str | None] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class QaCitation(Base):
+    __tablename__ = "qa_citations"
+    __table_args__ = (
+        UniqueConstraint(
+            "turn_id", "claim_id", "evidence_id", name="uq_qa_citations_claim_evidence"
+        ),
+        ForeignKeyConstraint(
+            ["retrieval_hit_id", "turn_id", "evidence_id"],
+            [
+                "qa_retrieval_hits.id",
+                "qa_retrieval_hits.turn_id",
+                "qa_retrieval_hits.evidence_id",
+            ],
+            name="fk_qa_citations_hit_evidence",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "length(btrim(claim_id)) > 0 AND length(btrim(claim_text)) > 0",
+            name="ck_qa_citations_claim",
+        ),
+        CheckConstraint("content_hash ~ '^[0-9a-f]{64}$'", name="ck_qa_citations_hash"),
+        CheckConstraint("length(frozen_quote) > 0", name="ck_qa_citations_quote"),
+        CheckConstraint("validation_status = 'valid'", name="ck_qa_citations_validation"),
+        CheckConstraint(
+            "(corpus_kind = 'source_evidence' AND source_id IS NOT NULL "
+            "AND source_version_id IS NOT NULL AND parse_artifact_id IS NOT NULL "
+            "AND section_id IS NOT NULL AND knowledge_node_id IS NULL "
+            "AND knowledge_revision_id IS NULL) OR "
+            "(corpus_kind = 'confirmed_knowledge' AND knowledge_node_id IS NOT NULL "
+            "AND knowledge_revision_id IS NOT NULL AND source_id IS NULL "
+            "AND source_version_id IS NULL AND parse_artifact_id IS NULL AND section_id IS NULL)",
+            name="ck_qa_citations_identity_shape",
+        ),
+        Index("ix_qa_citations_turn_claim", "turn_id", "claim_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    turn_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("qa_turns.id", ondelete="CASCADE"), nullable=False
+    )
+    claim_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    claim_text: Mapped[str] = mapped_column(Text, nullable=False)
+    retrieval_hit_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    evidence_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    corpus_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    knowledge_node_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    knowledge_revision_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    source_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    source_version_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    parse_artifact_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    section_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    frozen_quote: Mapped[str] = mapped_column(Text, nullable=False)
+    locator: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    deep_link: Mapped[str | None] = mapped_column(Text)
+    validation_status: Mapped[str] = mapped_column(String(32), nullable=False, default="valid")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

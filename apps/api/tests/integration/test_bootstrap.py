@@ -22,7 +22,7 @@ def test_bootstrap_reads_seeded_default_space_and_real_zero_counts() -> None:
             "knowledge_tree": True,
             "knowledge_folder_import": True,
             "retrieval_debug": True,
-            "trusted_qa": False,
+            "trusted_qa": True,
             "spaced_review": False,
             "evidence_agent": False,
         },

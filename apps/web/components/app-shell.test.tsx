@@ -40,8 +40,8 @@ describe("AppShell", () => {
     render(<AppShell><h1>提炼审查页</h1></AppShell>);
 
     expect(screen.getByRole("link", { name: "提炼审查" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByText("LOCAL · D7")).toBeInTheDocument();
-    expect(screen.getByText("D7 · 范围检索调试")).toBeInTheDocument();
+    expect(screen.getByText("LOCAL · D8")).toBeInTheDocument();
+    expect(screen.getByText("D8 · 可信引用问答")).toBeInTheDocument();
   });
 
   it("opens and closes the responsive navigation", async () => {

@@ -363,6 +363,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/knowledge-spaces/{space_id}/qa/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Turn */
+        post: operations["create_qa_turn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/qa/turns/by-idempotency-key/{idempotency_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Turn By Key */
+        get: operations["get_qa_turn_by_idempotency_key"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/qa/turns/{turn_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Turn */
+        get: operations["get_qa_turn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge-spaces/{space_id}/retrieval/debug-search": {
         parameters: {
             query?: never;
@@ -955,7 +1006,7 @@ export interface components {
             spaced_review: boolean;
             /**
              * Trusted Qa
-             * @default false
+             * @default true
              */
             trusted_qa: boolean;
         };
@@ -1725,6 +1776,92 @@ export interface components {
             text: string;
             /** Title */
             title: string;
+        };
+        /** QaCitationResponse */
+        QaCitationResponse: {
+            /** Claim Id */
+            claim_id: string;
+            /** Claim Text */
+            claim_text: string;
+            /** Content Identity */
+            content_identity: string;
+            /**
+             * Corpus Kind
+             * @enum {string}
+             */
+            corpus_kind: "source_evidence" | "confirmed_knowledge";
+            /** Deep Link */
+            deep_link: string | null;
+            /** Evidence Id */
+            evidence_id: string;
+            /** Frozen Quote */
+            frozen_quote: string;
+            /** Section Id */
+            section_id: string | null;
+        };
+        /** QaClaimResponse */
+        QaClaimResponse: {
+            /** Claim Id */
+            claim_id: string;
+            /** Claim Text */
+            claim_text: string;
+            /** Evidence Ids */
+            evidence_ids: string[];
+        };
+        /** QaScopeRequest */
+        QaScopeRequest: {
+            /**
+             * Include Descendants
+             * @default true
+             */
+            include_descendants: boolean;
+            /** Scope Node Id */
+            scope_node_id?: string | null;
+        };
+        /** QaTurnRequest */
+        QaTurnRequest: {
+            /** Question */
+            question: string;
+            scope?: components["schemas"]["QaScopeRequest"];
+        };
+        /** QaTurnResponse */
+        QaTurnResponse: {
+            /** Abstain Code */
+            abstain_code: string | null;
+            /** Ai Model */
+            ai_model: string;
+            /** Ai Provider */
+            ai_provider: string;
+            /** Answer */
+            answer: string | null;
+            /** Citations */
+            citations: components["schemas"]["QaCitationResponse"][];
+            /** Claims */
+            claims: components["schemas"]["QaClaimResponse"][];
+            /** Error Code */
+            error_code: string | null;
+            /** Error Message */
+            error_message: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Index Config Version */
+            index_config_version: string | null;
+            /** Question */
+            question: string;
+            /** Scope Snapshot */
+            scope_snapshot: {
+                [key: string]: unknown;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "processing" | "answered" | "abstained" | "failed";
+            /** Warnings */
+            warnings: string[];
         };
         /** ReadinessResponse */
         ReadinessResponse: {
@@ -3044,6 +3181,170 @@ export interface operations {
             };
             /** @description Unprocessable Entity */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_qa_turn: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QaTurnRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QaTurnResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_qa_turn_by_idempotency_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                idempotency_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QaTurnResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_qa_turn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QaTurnResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

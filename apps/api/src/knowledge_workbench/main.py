@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -7,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from minio import Minio
 from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from knowledge_workbench.api import (
     bootstrap,
@@ -17,13 +19,15 @@ from knowledge_workbench.api import (
     knowledge_import,
     knowledge_tree,
     non_file_sources,
+    qa,
     retrieval,
     source_parsing,
     sources,
 )
+from knowledge_workbench.application.qa_persistence import expire_stale_processing_turns
 from knowledge_workbench.config import Settings, get_settings
 from knowledge_workbench.core.errors import install_error_handlers
-from knowledge_workbench.core.logging import configure_logging
+from knowledge_workbench.core.logging import configure_logging, get_logger
 from knowledge_workbench.core.middleware import (
     knowledge_import_body_limit_middleware,
     pasted_text_body_limit_middleware,
@@ -32,6 +36,30 @@ from knowledge_workbench.core.middleware import (
 from knowledge_workbench.db.session import create_engine, create_session_factory
 from knowledge_workbench.infrastructure.storage.minio import MinioObjectStorage
 
+logger = get_logger(component="qa_processing_sweeper")
+
+
+async def sweep_stale_qa_turns(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    timeout_seconds: float,
+    interval_seconds: float,
+) -> None:
+    while True:
+        try:
+            await expire_stale_processing_turns(
+                session_factory,
+                timeout_seconds=timeout_seconds,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.exception(
+                "qa_processing_sweep_failed",
+                error_type=type(exc).__name__,
+            )
+        await asyncio.sleep(interval_seconds)
+
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     resolved_settings = settings or get_settings()
@@ -39,9 +67,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        yield
-        await app.state.redis.aclose()
-        await app.state.engine.dispose()
+        sweep_task = asyncio.create_task(
+            sweep_stale_qa_turns(
+                app.state.session_factory,
+                timeout_seconds=resolved_settings.qa_processing_timeout_seconds,
+                interval_seconds=resolved_settings.qa_processing_sweep_interval_seconds,
+            )
+        )
+        try:
+            yield
+        finally:
+            sweep_task.cancel()
+            await asyncio.gather(sweep_task, return_exceptions=True)
+            await app.state.redis.aclose()
+            await app.state.engine.dispose()
 
     app = FastAPI(
         title="Zixu Knowledge Workbench API",
@@ -102,6 +141,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(knowledge_tree.router)
     app.include_router(knowledge_import.router)
     app.include_router(retrieval.router)
+    app.include_router(qa.router)
     app.include_router(jobs.router)
     return app
 

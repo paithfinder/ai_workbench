@@ -31,21 +31,21 @@ from knowledge_workbench.db.models import (
     SourceVersion,
 )
 from knowledge_workbench.db.session import create_engine, create_session_factory
+from knowledge_workbench.infrastructure.ai.embedding_factory import (
+    create_embedding_gateway,
+)
 from knowledge_workbench.worker.job_runner import JobAttemptError
 from knowledge_workbench.worker.job_runner import (
     release_transient_attempt as release_index_attempt,
 )
-from knowledge_workbench.worker.source_index import (
-    SourceIndexWorker,
-    create_embedding_gateway,
-)
+from knowledge_workbench.worker.source_index import SourceIndexWorker
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_DATASET = BASE_DIR / "rag-seeds.zh-CN.json"
 DEFAULT_FIXTURE_MAP = BASE_DIR / "fixture-map.local.json"
-EXPECTED_DATABASE_REVISION = "0009_d7_cjk_fts"
+EXPECTED_DATABASE_REVISION = "0011_d8_hybrid_qa"
 FIXTURE_NAMESPACE = "https://zixu.local/evals/d7-retrieval/"
 OUTSIDE_SCOPE_KEY = "__out_of_scope__"
 
@@ -87,11 +87,37 @@ def fixture_units(dataset: dict[str, Any]) -> list[FixtureUnit]:
     seen_content: set[str] = set()
     seen_sections: set[str] = set()
     for seed in dataset["seeds"]:
-        if seed.get("should_abstain"):
-            continue
         contexts = seed["contexts"]
         identities = seed["expected_content_identities"]
         sections = seed["expected_section_ids"]
+        if seed.get("should_abstain"):
+            if identities or sections:
+                raise ValueError(f"{seed['id']} abstention fixture must not declare positives")
+            units.append(
+                FixtureUnit(
+                    scope_key=seed["scope"]["key"],
+                    content_key=f"{seed['id']}:abstention-context",
+                    section_key=None,
+                    text="\n".join(contexts),
+                    seed_id=seed["id"],
+                )
+            )
+            outside_text = "\n".join([seed["question"], *contexts])
+            for outside_identity in seed["out_of_scope_content_identities"]:
+                if outside_identity in seen_content:
+                    raise ValueError(f"duplicate fixture key in {seed['id']}: {outside_identity}")
+                seen_content.add(outside_identity)
+                units.append(
+                    FixtureUnit(
+                        scope_key=OUTSIDE_SCOPE_KEY,
+                        content_key=outside_identity,
+                        section_key=None,
+                        text=outside_text,
+                        seed_id=seed["id"],
+                        outside=True,
+                    )
+                )
+            continue
         if len(identities) != len(sections):
             raise ValueError(f"{seed['id']} must pair every expected identity with a section")
         if len(identities) == len(contexts):

@@ -17,7 +17,7 @@ const navigation = [
   {
     label: "学习应用",
     items: [
-      { href: "/qa", label: "范围检索", icon: "✦" },
+      { href: "/qa", label: "可信问答", icon: "✦" },
       { href: "/review", label: "间隔复习", icon: "↻" },
       { href: "/activity", label: "学习记录", icon: "◷" },
     ],
@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <strong>知识管理工作台</strong>
         </div>
         <div className="top-actions">
-          <span className="local-pill">LOCAL · D7</span>
+          <span className="local-pill">LOCAL · D8</span>
           <span className="avatar" aria-label="当前用户 MT">MT</span>
         </div>
       </header>
@@ -110,8 +110,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <p className="sidebar-note">
-          D7 · 范围检索调试
-          <span>限定知识边界，对照关键词与语义召回结果</span>
+          D8 · 可信引用问答
+          <span>限定知识边界，发布经服务端验证的回答与引用</span>
         </p>
       </aside>
 

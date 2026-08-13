@@ -29,8 +29,7 @@ from knowledge_workbench.db.models import (
     SourceVersion,
 )
 from knowledge_workbench.db.session import create_engine, create_session_factory
-from knowledge_workbench.infrastructure.ai.bge_m3 import BGEM3HttpEmbeddingGateway
-from knowledge_workbench.infrastructure.ai.fake_embedding import FakeEmbeddingGateway
+from knowledge_workbench.infrastructure.ai.embedding_factory import create_embedding_gateway
 from knowledge_workbench.worker.job_runner import ClaimToken, JobRunner, PermanentJobError
 from knowledge_workbench.worker.job_runner import mark_transient_failure as mark_job_failure
 from knowledge_workbench.worker.job_runner import (
@@ -319,19 +318,6 @@ class SourceIndexWorker(JobRunner):
             and job.status == JobStatus.RUNNING.value
             and job.attempt_count == token.attempt_number
         )
-
-
-def create_embedding_gateway(settings: Settings) -> EmbeddingGateway:
-    if settings.embedding_provider == "bge_m3_http":
-        return BGEM3HttpEmbeddingGateway(
-            url=settings.embedding_url,
-            model=settings.embedding_model,
-            dimensions=settings.embedding_dimensions,
-            timeout_seconds=settings.embedding_timeout_seconds,
-        )
-    return FakeEmbeddingGateway(
-        model=settings.embedding_model, dimensions=settings.embedding_dimensions
-    )
 
 
 async def run_source_index(

@@ -28,7 +28,7 @@ class CapabilityResponse(BaseModel):
     knowledge_tree: bool = True
     knowledge_folder_import: bool = True
     retrieval_debug: bool = True
-    trusted_qa: bool = False
+    trusted_qa: bool = True
     spaced_review: bool = False
     evidence_agent: bool = False
 

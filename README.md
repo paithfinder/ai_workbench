@@ -1,8 +1,8 @@
 # 自序 · 个人知识工作台
 
-D1 建立两周 MVP 的可运行基础，D2 打通不可变来源导入，D3 加入可重试的真实文档解析、版本化解析产物与可信引用定位，D4 实现结构化 AI 提炼与可追踪 Extraction Job，D5 交付候选编辑、人工决策与正式知识入库事务，D6 已加入 PostgreSQL 持久化知识树、Revision 编辑、词法搜索和不可漂移的来源深链。D7 边界是 Chunk、Embedding、Keyword/Vector 检索调试与离线检索评测；带引用问答不在 D7 范围。
+D1 建立两周 MVP 的可运行基础，D2 打通不可变来源导入，D3 加入可重试的真实文档解析、版本化解析产物与可信引用定位，D4 实现结构化 AI 提炼与可追踪 Extraction Job，D5 交付候选编辑、人工决策与正式知识入库事务，D6 已加入 PostgreSQL 持久化知识树、Revision 编辑、词法搜索和不可漂移的来源深链。D7 交付 Chunk、Embedding、Keyword/Vector 检索调试与离线检索评测；D8 在相同范围边界上加入 Hybrid RRF、可选 Reranker、有界 Context、结构化回答/拒答和服务端引用校验。
 
-## 当前 D1–D7 能力
+## 当前 D1–D8 能力
 
 - Next.js 应用与 FastAPI 服务固定为 Web `http://localhost:3000`、API `http://localhost:8000`；使用单个预置个人知识空间，数据模型与接口仍显式携带 `space_id`。
 - PostgreSQL/pgvector 保存业务事实，Redis 作为 Celery broker/短期基础设施，MinIO 保存不可变来源原件与解析产物；Alembic 管理迁移。
@@ -18,7 +18,8 @@ D1 建立两周 MVP 的可运行基础，D2 打通不可变来源导入，D3 加
 - D5 写接口要求 `Idempotency-Key` 与 `expected_version`，支持结果重放、冲突检测和不确定响应 reconciliation；接受来源 Evidence 前会重新校验版本、解析产物、locator 与 quote hash。
 - D6 以邻接表和 PostgreSQL `ltree` 持久化 `root/folder/document/point/source` 五类节点；支持创建目录/文档、追加 Revision、移动子树、软删除、乐观锁、幂等重放和写结果 reconciliation。追加 Revision 会保留历史并显式继承当前冻结 Evidence；编辑界面要求保存前确认修改后的正文仍由这些来源支持。
 - `/knowledge` 提供可折叠 WAI-ARIA Tree、服务端标题/正文/显示路径/关联来源标题搜索、详情维护和 Citation drawer；引用固定到精确 SourceVersion、ParseArtifact 与 Section，并可深链到历史原文高亮位置。
-- D7 通过真实 HTTP debug API 分别暴露 Keyword 与 Vector Top-K 结果。`evals/` 的 32 条中文 seeds 覆盖 scope、内容 identity、section、困难负样本和拒答；retrieval runner 只对 27 条 `should_abstain=false` 的可回答样本计算 Recall@5、可选 MRR 与 Scope Leakage，拒答字段留给 D8 答案评测。
+- D7 通过真实 HTTP debug API 分别暴露 Keyword 与 Vector Top-K 结果。`evals/` 的 32 条中文 seeds 覆盖 scope、内容 identity、section、困难负样本和拒答；retrieval runner 对 27 条可回答样本计算 Recall@5、可选 MRR 与 Scope Leakage。
+- D8 生产问答执行 `Scope → Keyword/Vector → RRF → optional rerank → bounded Context → structured answer/abstain → citation validation → persistence`。`/qa` 只发布经服务端验证的答案与冻结引用；空证据、范围外证据或引用不完整时安全拒答/失败关闭，`/qa/debug` 保留 D7 原始通道调试。
 - 合成 parser fixture 覆盖 UTF-8 中文/Unicode、静态 HTML、单页/多页 PDF、表格、纯图片、空文件和畸形 PDF，并冻结来源哈希与期望 quote hash。
 
 架构决策见 [`docs/adr/`](docs/adr/)，D3 worker/runtime 决策见 [`ADR-0005`](docs/adr/0005-d3-parse-worker-and-runtime.md)。
@@ -135,6 +136,37 @@ uv run --package knowledge-workbench-api python evals/run_retrieval.py \
 
 runner 会在发请求前拒绝不完整或仍含 `<placeholder>` 的映射。Scope Leakage 只按已映射的 `out_of_scope_content_identities` 命中计算；所有范围外对照内容都存放在评测空间的独立兄弟子树中，用于验证 `space_id + ltree` 过滤，而不是根据不存在于冻结 hit 契约的 scope 字段猜测。`evals/fixture-map.example.json` 只展示格式，不是可执行 baseline 数据，也不得直接作为报告输入。
 
+## D8 Hybrid RAG、Reranker 与可信问答
+
+生产端点为：
+
+```text
+POST /api/v1/knowledge-spaces/{space_id}/qa/turns
+GET  /api/v1/knowledge-spaces/{space_id}/qa/turns/{turn_id}
+GET  /api/v1/knowledge-spaces/{space_id}/qa/turns/by-idempotency-key/{key}
+```
+
+POST 必须携带 `Idempotency-Key`。相同 key 和请求体返回同一 Turn；相同 key 配合不同请求体返回冲突，不会重复调用模型。Reranker 默认关闭；启用本地 `bge-reranker-v2-m3` HTTP 服务时配置：
+
+```dotenv
+RERANKER_PROVIDER=bge_http
+RERANKER_URL=http://127.0.0.1:8081/rerank
+RERANKER_MODEL=BAAI/bge-reranker-v2-m3
+RERANKER_TIMEOUT_SECONDS=15
+```
+
+Reranker 超时、连接失败、429、5xx 或协议错误会记录 warning 并回退到 RRF；不会自动切换到 Fake。`AI_PROVIDER=fake` 只验证流水线和拒答路径，不能作为答案质量 baseline。正式 D8 QA 报告要求真实 BGE-M3 fixture 和非 Fake QA Provider：
+
+```bash
+uv run --package knowledge-workbench-api python evals/run_qa.py \
+  --base-url http://localhost:8000 \
+  --space-id <fixture-map.local.json 中的 space_id> \
+  --fixture-map evals/fixture-map.local.json \
+  --output evals/qa-report.json
+```
+
+报告包含 Citation Validity、Claim Citation Coverage、Correct Abstention Rate、Scope Leakage、失败样本和运行时模型/索引 metadata。Fake smoke 必须显式添加 `--allow-fake-smoke`，且报告固定为 `baseline_eligible=false`。
+
 ## 本地开发
 
 要求 Python 3.12、uv、Node.js 20 和 pnpm 10。
@@ -197,9 +229,9 @@ pnpm contract:check
 # D7 RAG JSON + Schema（无需第三方 Python 包）
 python evals/validate_seeds.py
 
-# validator 与 HTTP runner 单元/自测
+# validator、D7 retrieval runner 与 D8 QA runner 单元/自测
 python -m unittest discover -s evals -p "test_*.py" -v
-python -m py_compile evals/validate_seeds.py evals/run_retrieval.py evals/test_eval_tools.py
+python -m py_compile evals/validate_seeds.py evals/run_retrieval.py evals/run_qa.py evals/test_eval_tools.py
 
 # 在已导入且已索引评测内容的真实 D7 API 上运行 Recall@5、MRR、Scope Leakage
 python evals/run_retrieval.py \
@@ -215,6 +247,13 @@ python evals/run_retrieval.py \
   --space-id <测试空间UUID> \
   --smoke-scope-node-id <测试空间内范围节点UUID> \
   --allow-fake-smoke
+
+# D8 Hybrid QA、引用有效性、claim coverage、拒答和 scope leakage
+python evals/run_qa.py \
+  --base-url http://localhost:8000 \
+  --space-id <真实评测空间UUID> \
+  --fixture-map evals/fixture-map.local.json \
+  --output evals/qa-report.json
 
 # D3 fixture、确定性 parser contract 与真实 Docling fixture 回归
 uv run --package knowledge-workbench-api pytest \

@@ -21,8 +21,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - name: Validate Chinese RAG seeds
-        run: python evals/validate_seeds.py
+      - name: Validate Chinese RAG seeds and eval tools
+        run: |
+          python evals/validate_seeds.py
+          python -m py_compile evals/validate_seeds.py evals/run_retrieval.py evals/run_qa.py
 
   backend:
     name: Backend, migrations, OpenAPI

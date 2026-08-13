@@ -24,6 +24,7 @@ def load_module(name: str, filename: str):
 validator = load_module("validate_seeds", "validate_seeds.py")
 runner = load_module("run_retrieval", "run_retrieval.py")
 fixture = load_module("prepare_retrieval_fixture", "prepare_retrieval_fixture.py")
+qa_runner = load_module("run_qa", "run_qa.py")
 
 
 class ValidatorTests(unittest.TestCase):
@@ -59,10 +60,10 @@ class FixturePreparationTests(unittest.TestCase):
         positives = [unit for unit in units if not unit.outside]
         outside = [unit for unit in units if unit.outside]
 
-        self.assertEqual(len(positives), 28)
-        self.assertEqual(len(outside), 27)
-        self.assertEqual(len({unit.content_key for unit in units}), 55)
-        self.assertEqual(len({unit.section_key for unit in positives}), 28)
+        self.assertEqual(len(positives), 33)
+        self.assertEqual(len(outside), 32)
+        self.assertEqual(len({unit.content_key for unit in units}), 65)
+        self.assertEqual(len({unit.section_key for unit in positives}), 29)
         self.assertEqual(
             {unit.scope_key for unit in outside}, {fixture.OUTSIDE_SCOPE_KEY}
         )
@@ -98,6 +99,28 @@ class FixturePreparationTests(unittest.TestCase):
         self.assertEqual(same, fixture._stable_uuid(dataset, "section", "section-a"))
         changed = dict(dataset, version="1.0.1")
         self.assertNotEqual(same, fixture._stable_uuid(changed, "section", "section-a"))
+    def test_abstention_context_is_indexed_without_declaring_a_positive(self) -> None:
+        dataset = {
+            "dataset": "test",
+            "version": "1.0.0",
+            "seeds": [
+                {
+                    "id": "rag-test-abstain",
+                    "question": "未知问题",
+                    "contexts": ["这里没有答案，只说明资料范围。"],
+                    "scope": {"key": "scope-a", "include_descendants": True},
+                    "expected_content_identities": [],
+                    "expected_section_ids": [],
+                    "out_of_scope_content_identities": ["outside-a"],
+                    "should_abstain": True,
+                }
+            ],
+        }
+        units = fixture.fixture_units(dataset)
+        local = next(unit for unit in units if not unit.outside)
+        self.assertEqual(local.scope_key, "scope-a")
+        self.assertEqual(local.section_key, None)
+        self.assertIn("没有答案", local.text)
 
 
 class RunnerTests(unittest.TestCase):
@@ -315,6 +338,183 @@ class RunnerTests(unittest.TestCase):
             invalid_args.smoke_scope_node_id = "scope-a"
             with self.assertRaisesRegex(ValueError, "must be a UUID"):
                 runner.run(invalid_args)
+
+
+class QaRunnerTests(unittest.TestCase):
+    def seed(self, *, abstain: bool = False) -> dict[str, object]:
+        return {
+            "id": "rag-zh-901" if not abstain else "rag-zh-902",
+            "question": "测试问题是什么？",
+            "scope": {"key": "scope-a", "include_descendants": True},
+            "expected_content_identities": [] if abstain else ["content:expected"],
+            "expected_section_ids": [] if abstain else ["section-expected"],
+            "out_of_scope_content_identities": ["content:outside"],
+            "should_abstain": abstain,
+        }
+
+    def mappings(self) -> dict[str, dict[str, str]]:
+        return {
+            "scope_node_ids": {"scope-a": "00000000-0000-4000-8000-000000000001"},
+            "content_identities": {
+                "content:expected": "a" * 64,
+                "content:outside": "b" * 64,
+            },
+            "section_ids": {
+                "section-expected": "00000000-0000-4000-8000-000000000002"
+            },
+        }
+
+    def test_request_body_uses_resolved_scope(self) -> None:
+        body = qa_runner.request_body(self.seed(), self.mappings())
+        self.assertEqual(
+            body,
+            {
+                "question": "测试问题是什么？",
+                "scope": {
+                    "scope_node_id": "00000000-0000-4000-8000-000000000001",
+                    "include_descendants": True,
+                },
+            },
+        )
+
+    def test_answered_turn_scores_citations_and_claim_coverage(self) -> None:
+        payload = {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "status": "answered",
+            "question": "测试问题是什么？",
+            "scope_snapshot": {},
+            "index_config_version": "d8-v1",
+            "ai_provider": "anthropic",
+            "ai_model": "claude-opus-5",
+            "answer": "有答案。",
+            "abstain_code": None,
+            "error_code": None,
+            "error_message": None,
+            "warnings": [],
+            "claims": [
+                {"claim_id": "C1", "claim_text": "有答案", "evidence_ids": ["E1"]}
+            ],
+            "citations": [
+                {
+                    "claim_id": "C1",
+                    "claim_text": "有答案",
+                    "evidence_id": "E1",
+                    "content_identity": "a" * 64,
+                    "section_id": "00000000-0000-4000-8000-000000000002",
+                    "corpus_kind": "source_evidence",
+                    "frozen_quote": "冻结证据",
+                }
+            ],
+        }
+        result = qa_runner.score_seed(self.seed(), payload, self.mappings())
+        self.assertTrue(result["correct_abstention"])
+        self.assertEqual(result["citation_validity"], 1.0)
+        self.assertEqual(result["claim_citation_coverage"], 1.0)
+        self.assertTrue(result["expected_evidence_cited"])
+        self.assertEqual(result["scope_leak_count"], 0)
+
+    def test_claim_coverage_uses_generated_claims_not_citation_rows(self) -> None:
+        payload = {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "status": "answered",
+            "question": "测试问题是什么？",
+            "scope_snapshot": {},
+            "index_config_version": "d8-v1",
+            "ai_provider": "anthropic",
+            "ai_model": "claude-opus-5",
+            "answer": "两个事实。",
+            "abstain_code": None,
+            "error_code": None,
+            "error_message": None,
+            "warnings": [],
+            "claims": [
+                {"claim_id": "C1", "claim_text": "事实一", "evidence_ids": ["E1"]},
+                {"claim_id": "C2", "claim_text": "事实二", "evidence_ids": ["E2"]},
+            ],
+            "citations": [
+                {
+                    "claim_id": "C1",
+                    "claim_text": "事实一",
+                    "evidence_id": "E1",
+                    "content_identity": "a" * 64,
+                    "section_id": "00000000-0000-4000-8000-000000000002",
+                    "corpus_kind": "source_evidence",
+                    "frozen_quote": "冻结证据",
+                }
+            ],
+        }
+        result = qa_runner.score_seed(self.seed(), payload, self.mappings())
+        self.assertEqual(result["claim_citation_coverage"], 0.5)
+
+    def test_abstention_scores_without_citations(self) -> None:
+        payload = {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "status": "abstained",
+            "question": "测试问题是什么？",
+            "scope_snapshot": {},
+            "index_config_version": "d8-v1",
+            "ai_provider": "anthropic",
+            "ai_model": "claude-opus-5",
+            "answer": None,
+            "abstain_code": "insufficient_evidence",
+            "error_code": None,
+            "error_message": None,
+            "warnings": [],
+            "claims": [],
+            "citations": [],
+        }
+        result = qa_runner.score_seed(self.seed(abstain=True), payload, self.mappings())
+        self.assertTrue(result["correct_abstention"])
+        self.assertEqual(result["citation_validity"], 1.0)
+        self.assertEqual(result["claim_citation_coverage"], 1.0)
+
+    def test_baseline_metadata_requires_real_bge_and_matching_index(self) -> None:
+        metadata = {
+            "embedding": {
+                "provider": "bge_m3_http",
+                "model": "BAAI/bge-m3",
+                "dimensions": 1024,
+            },
+            "index_config_version": "d8-v1",
+            "turn_index_config_versions": ["d8-v1"],
+        }
+        self.assertEqual(qa_runner.baseline_metadata_issues(metadata), [])
+        metadata["turn_index_config_versions"] = ["other"]
+        self.assertTrue(qa_runner.baseline_metadata_issues(metadata))
+
+    def test_scope_leakage_is_detected_from_frozen_identity(self) -> None:
+        payload = {
+            "id": "00000000-0000-4000-8000-000000000003",
+            "status": "answered",
+            "question": "测试问题是什么？",
+            "scope_snapshot": {},
+            "index_config_version": "d8-v1",
+            "ai_provider": "anthropic",
+            "ai_model": "claude-opus-5",
+            "answer": "错误答案。",
+            "abstain_code": None,
+            "error_code": None,
+            "error_message": None,
+            "warnings": [],
+            "claims": [
+                {"claim_id": "C1", "claim_text": "错误答案", "evidence_ids": ["E1"]}
+            ],
+            "citations": [
+                {
+                    "claim_id": "C1",
+                    "claim_text": "错误答案",
+                    "evidence_id": "E1",
+                    "content_identity": "b" * 64,
+                    "section_id": None,
+                    "corpus_kind": "source_evidence",
+                    "frozen_quote": "范围外证据",
+                }
+            ],
+        }
+        result = qa_runner.score_seed(self.seed(), payload, self.mappings())
+        self.assertEqual(result["citation_validity"], 0.0)
+        self.assertEqual(result["scope_leak_count"], 1)
+        self.assertFalse(result["expected_evidence_cited"])
 
 
 if __name__ == "__main__":

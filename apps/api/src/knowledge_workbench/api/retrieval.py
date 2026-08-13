@@ -21,7 +21,7 @@ from knowledge_workbench.db.models import (
     Source,
     SourceVersion,
 )
-from knowledge_workbench.worker.source_index import create_embedding_gateway
+from knowledge_workbench.infrastructure.ai.embedding_factory import create_embedding_gateway
 
 router = APIRouter(prefix="/api/v1/knowledge-spaces/{space_id}/retrieval", tags=["retrieval"])
 IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=255)]

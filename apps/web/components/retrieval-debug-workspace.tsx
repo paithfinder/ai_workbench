@@ -25,7 +25,7 @@ function nodeLabel(node: KnowledgeNode) {
   return node.title ?? ({ root: "知识库", folder: "未命名目录", document: "未命名文档", point: "未命名知识点", source: "未命名来源" } as const)[node.kind];
 }
 
-function scopeBreadcrumb(nodes: KnowledgeNode[], nodeId: string) {
+export function scopeBreadcrumb(nodes: KnowledgeNode[], nodeId: string) {
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const labels: string[] = [];
   let current = byId.get(nodeId);
@@ -38,7 +38,7 @@ function scopeBreadcrumb(nodes: KnowledgeNode[], nodeId: string) {
   return labels.join(" / ");
 }
 
-function ScopeTree({ nodes, selectedId, onSelect }: { nodes: KnowledgeNode[]; selectedId: string; onSelect: (nodeId: string) => void }) {
+export function ScopeTree({ nodes, selectedId, onSelect }: { nodes: KnowledgeNode[]; selectedId: string; onSelect: (nodeId: string) => void }) {
   const children = useMemo(() => {
     const result = new Map<string | null, KnowledgeNode[]>();
     for (const node of nodes) result.set(node.parent_id, [...(result.get(node.parent_id) ?? []), node]);
@@ -69,7 +69,7 @@ function ScopeTree({ nodes, selectedId, onSelect }: { nodes: KnowledgeNode[]; se
   return renderLevel(null, 0);
 }
 
-function ScopeSummary({ summary, breadcrumb, includeDescendants, pending }: {
+export function ScopeSummary({ summary, breadcrumb, includeDescendants, pending }: {
   summary?: RetrievalScopeSummary;
   breadcrumb: string;
   includeDescendants: boolean;
