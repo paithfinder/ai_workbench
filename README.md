@@ -281,7 +281,7 @@ CI 会显式执行 D3 fixture、确定性 parser contract 与真实 Docling fixt
 
 ## 尚未实现
 
-- D8 的带引用问答、RRF/reranker、query rewrite、答案拒答判定、Citation Validity 与 Claim Citation Coverage；这些不是 D7 retrieval runner 的目标，不能由 Recall@5 结果代替。
+- Query rewrite。
 - LangGraph/Agent，以及 D10 的 FSRS 调度字段与完整间隔复习。
 - 多空间创建/切换、团队协作、用户身份、权限与配额管理。
 - 生产 AI 密钥托管、预算/成本告警和更完整的限流策略；本地默认使用 Fake Provider，真实 Anthropic 调用需要显式服务端配置。

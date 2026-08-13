@@ -96,15 +96,24 @@ async function decodeUtf8(file: File) {
 export async function prepareKnowledgeImport(
   files: FileList | File[],
   limits: KnowledgeImportLimits,
+  options: { mode?: "folder" | "files" } = {},
 ): Promise<KnowledgeImportManifest> {
   const selected = Array.from(files) as DirectoryFile[];
   const issues: string[] = [];
-  if (!selected.length) throw new KnowledgeImportValidationError(["所选文件夹中没有文件"]);
+  if (!selected.length) throw new KnowledgeImportValidationError(["没有选择文件"]);
+  const mode = options.mode ?? "folder";
+  const standaloneRootName = mode === "files"
+    ? (selected.length === 1
+      ? selected[0].name.replace(/\.[^.]+$/, "") || "导入的笔记"
+      : "导入的笔记")
+    : null;
 
   const roots = new Set<string>();
   const normalizedEntries: Array<{ file: DirectoryFile; parts: string[] }> = [];
   for (const file of selected) {
-    const rawPath = file.webkitRelativePath || file.name;
+    const rawPath = mode === "files"
+      ? `${standaloneRootName}/${file.name}`
+      : file.webkitRelativePath || file.name;
     if (!rawPath || rawPath.startsWith("/") || rawPath.includes("\\")) {
       issues.push(`${file.name} 没有安全的相对路径`);
       continue;

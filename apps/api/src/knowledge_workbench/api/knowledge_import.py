@@ -7,6 +7,7 @@ from fastapi import APIRouter, Header, status
 from pydantic import BaseModel
 
 from knowledge_workbench.api.dependencies import SessionDependency, SettingsDependency
+from knowledge_workbench.application.indexing import IndexingService
 from knowledge_workbench.application.knowledge_import import (
     KnowledgeImportCreate,
     KnowledgeImportOutcome,
@@ -97,6 +98,16 @@ async def create_knowledge_import(
             request=request,
             settings=settings,
         )
+        for item in outcome.items:
+            if item.kind != "document":
+                continue
+            await IndexingService().request_knowledge_rebuild(
+                session,
+                settings=settings,
+                space_id=space_id,
+                revision_id=item.revision_id,
+                idempotency_key=f"knowledge-import:{outcome.request_id}:{item.ordinal}",
+            )
     return _response(outcome)
 
 

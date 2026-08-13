@@ -60,6 +60,22 @@ describe("knowledge folder import", () => {
     ]);
   });
 
+  it("prepares standalone Markdown files for direct import", async () => {
+    vi.stubGlobal("crypto", { randomUUID: () => "import-key" });
+    const manifest = await prepareKnowledgeImport(
+      [new File(["# 已整理笔记\n正文"], "研究.md", { type: "text/markdown" })],
+      limits,
+      { mode: "files" },
+    );
+
+    expect(manifest.rootName).toBe("研究");
+    expect(manifest.folderCount).toBe(1);
+    expect(manifest.entryCount).toBe(2);
+    expect(manifest.documents).toEqual([
+      { relative_path: "研究.md", body: "# 已整理笔记\n正文" },
+    ]);
+  });
+
   it("rejects unsupported, invalid UTF-8, duplicate, and oversized files", async () => {
     await expect(prepareKnowledgeImport([
       directoryFile("知识库/note.pdf", "pdf"),

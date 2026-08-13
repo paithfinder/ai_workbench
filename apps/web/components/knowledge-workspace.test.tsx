@@ -135,9 +135,9 @@ describe("KnowledgeWorkspace", () => {
     renderWorkspace();
     const tree = await screen.findByRole("tree", { name: "知识目录" });
     await userEvent.click(within(tree).getByRole("treeitem", { name: /研究/ }));
-    await userEvent.click(screen.getByRole("button", { name: "导入文件夹" }));
+    await userEvent.click(screen.getByRole("button", { name: "直接导入笔记" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "导入已整理知识库" });
+    const dialog = await screen.findByRole("dialog", { name: "直接导入 Markdown / TXT" });
     expect(within(dialog).getByText(/我的知识库 \/ 研究/)).toBeInTheDocument();
     const unsupported = new File(["binary"], "notes.pdf", { type: "application/pdf" });
     Object.defineProperty(unsupported, "webkitRelativePath", { value: "知识库/notes.pdf" });
