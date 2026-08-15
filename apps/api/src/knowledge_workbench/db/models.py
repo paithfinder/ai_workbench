@@ -107,6 +107,46 @@ class CandidateReviewAction(StrEnum):
     REJECT = "reject"
 
 
+class ResearchRunStatus(StrEnum):
+    DRAFT = "draft"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class KnowledgeUpdateAction(StrEnum):
+    CREATE = "create"
+    REVISE = "revise"
+    SUPERSEDE = "supersede"
+    MERGE_SUGGESTION = "merge_suggestion"
+    MARK_REVIEW_RECOMMENDED = "mark_review_recommended"
+
+
+class KnowledgeUpdateProposalStatus(StrEnum):
+    DRAFT = "draft"
+    PENDING_REVIEW = "pending_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    APPLIED = "applied"
+    SUPERSEDED = "superseded"
+
+
+class KnowledgeUpdateProposalEvidenceRole(StrEnum):
+    NEW_SUPPORT = "new_support"
+    EXISTING_SUPPORT = "existing_support"
+    CONFLICT = "conflict"
+    OUTDATED = "outdated"
+    CONTEXTUAL = "contextual"
+
+
+class KnowledgeUpdateProposalOperation(StrEnum):
+    CREATE = "create"
+    EDIT = "edit"
+    SUBMIT = "submit"
+    APPROVE = "approve"
+    REJECT = "reject"
+    SUPERSEDE = "supersede"
+
+
 class KnowledgeNodeKind(StrEnum):
     ROOT = "root"
     FOLDER = "folder"
@@ -188,6 +228,7 @@ class KnowledgeSpace(TimestampMixin, Base):
 class Source(TimestampMixin, Base):
     __tablename__ = "sources"
     __table_args__ = (
+        UniqueConstraint("id", "space_id", name="uq_sources_id_space"),
         CheckConstraint(
             "kind IN ('pdf','markdown','text','web','pasted_text')",
             name="ck_sources_kind",
@@ -418,6 +459,7 @@ class SourceSection(Base):
             "source_version_id",
             name="uq_source_sections_id_artifact_version",
         ),
+        UniqueConstraint("id", "space_id", name="uq_source_sections_id_space"),
         UniqueConstraint("parse_artifact_id", "ordinal", name="uq_source_sections_ordinal"),
         UniqueConstraint("parse_artifact_id", "block_id", name="uq_source_sections_block"),
         CheckConstraint("ordinal >= 0", name="ck_source_sections_ordinal_nonnegative"),
@@ -743,6 +785,7 @@ class KnowledgeRevision(Base):
             ondelete="CASCADE",
         ),
         UniqueConstraint("node_id", "id", name="uq_knowledge_revisions_node_id"),
+        UniqueConstraint("id", "space_id", name="uq_knowledge_revisions_id_space"),
         UniqueConstraint("node_id", "revision_number", name="uq_knowledge_revisions_node_number"),
         CheckConstraint(
             "content_hash ~ '^[0-9a-f]{64}$'",
@@ -808,6 +851,351 @@ class KnowledgeEvidence(Base):
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     locator: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     frozen_quote: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ResearchRun(Base):
+    __tablename__ = "research_runs"
+    __table_args__ = (
+        UniqueConstraint("id", "space_id", name="uq_research_runs_id_space"),
+        CheckConstraint("status IN ('draft','completed','failed')", name="ck_research_runs_status"),
+        Index("ix_research_runs_space_status_created", "space_id", "status", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default=ResearchRunStatus.DRAFT)
+    origin: Mapped[str] = mapped_column(String(100), nullable=False, default="manual")
+    model: Mapped[str | None] = mapped_column(String(200))
+    prompt_version: Mapped[str | None] = mapped_column(String(100))
+    tool_policy_version: Mapped[str | None] = mapped_column(String(100))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class KnowledgeUpdateProposal(Base):
+    __tablename__ = "knowledge_update_proposals"
+    __table_args__ = (
+        UniqueConstraint("id", "space_id", name="uq_knowledge_update_proposals_id_space"),
+        ForeignKeyConstraint(
+            ["target_node_id", "space_id"],
+            ["knowledge_nodes.id", "knowledge_nodes.space_id"],
+            name="fk_knowledge_update_proposals_target_node_space",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["target_revision_id", "space_id"],
+            ["knowledge_revisions.id", "knowledge_revisions.space_id"],
+            name="fk_knowledge_update_proposals_target_revision_space",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["target_node_id", "target_revision_id"],
+            ["knowledge_revisions.node_id", "knowledge_revisions.id"],
+            name="fk_knowledge_update_proposals_target_revision_node",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["research_run_id", "space_id"],
+            ["research_runs.id", "research_runs.space_id"],
+            name="fk_knowledge_update_proposals_research_run_space",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "action IN (\n"
+            "'create','revise','supersede','merge_suggestion','mark_review_recommended'\n"
+            ")",
+            name="ck_knowledge_update_proposals_action",
+        ),
+        CheckConstraint(
+            "status IN ('draft','pending_review','approved','rejected','applied','superseded')",
+            name="ck_knowledge_update_proposals_status",
+        ),
+        CheckConstraint("version > 0", name="ck_knowledge_update_proposals_version_positive"),
+        CheckConstraint(
+            "confidence IS NULL OR (confidence >= 0 AND confidence <= 1)",
+            name="ck_knowledge_update_proposals_confidence",
+        ),
+        CheckConstraint(
+            "suggested_title IS NULL OR length(btrim(suggested_title)) > 0",
+            name="ck_knowledge_update_proposals_title",
+        ),
+        Index(
+            "ix_knowledge_update_proposals_space_status_created",
+            "space_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_knowledge_update_proposals_space_target_status",
+            "space_id",
+            "target_node_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    research_run_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    target_node_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    target_revision_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    target_node_version: Mapped[int | None] = mapped_column(Integer)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=KnowledgeUpdateProposalStatus.DRAFT
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    suggested_title: Mapped[str | None] = mapped_column(String(500))
+    suggested_body: Mapped[str | None] = mapped_column(Text)
+    suggested_tags: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    conditions: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    exceptions: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    comparison_summary: Mapped[str | None] = mapped_column(Text)
+    confidence: Mapped[float | None] = mapped_column(Float)
+    uncertainty_reason: Mapped[str | None] = mapped_column(String(2000))
+    superseded_by_proposal_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+class KnowledgeUpdateProposalEvidence(Base):
+    __tablename__ = "knowledge_update_proposal_evidence"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["proposal_id", "space_id"],
+            ["knowledge_update_proposals.id", "knowledge_update_proposals.space_id"],
+            name="fk_knowledge_update_proposal_evidence_proposal_space",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["source_id", "space_id"],
+            ["sources.id", "sources.space_id"],
+            name="fk_knowledge_update_proposal_evidence_source_space",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_version_id", "source_id"],
+            ["source_versions.id", "source_versions.source_id"],
+            name="fk_knowledge_update_proposal_evidence_version_source",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["section_id", "space_id"],
+            ["source_sections.id", "source_sections.space_id"],
+            name="fk_knowledge_update_proposal_evidence_section_space",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["section_id", "parse_artifact_id", "source_version_id"],
+            [
+                "source_sections.id",
+                "source_sections.parse_artifact_id",
+                "source_sections.source_version_id",
+            ],
+            name="fk_knowledge_update_proposal_evidence_section_artifact_version",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["knowledge_revision_id", "space_id"],
+            ["knowledge_revisions.id", "knowledge_revisions.space_id"],
+            name="fk_knowledge_update_proposal_evidence_revision_space",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["parse_artifact_id", "source_version_id"],
+            ["source_parse_artifacts.id", "source_parse_artifacts.source_version_id"],
+            name="fk_knowledge_update_proposal_evidence_artifact_version",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "role IN ('new_support','existing_support','conflict','outdated','contextual')",
+            name="ck_knowledge_update_proposal_evidence_role",
+        ),
+        CheckConstraint("ordinal >= 0", name="ck_knowledge_update_proposal_evidence_ordinal"),
+        CheckConstraint(
+            "quote_hash ~ '^[0-9a-f]{64}$' AND content_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_knowledge_update_proposal_evidence_hashes",
+        ),
+        CheckConstraint(
+            "length(frozen_quote) > 0", name="ck_knowledge_update_proposal_evidence_quote"
+        ),
+        UniqueConstraint(
+            "proposal_id", "ordinal", name="uq_knowledge_update_proposal_evidence_ordinal"
+        ),
+        UniqueConstraint(
+            "proposal_id",
+            "section_id",
+            "role",
+            name="uq_knowledge_update_proposal_evidence_section_role",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    proposal_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    space_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_version_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    parse_artifact_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    section_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    knowledge_revision_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    frozen_quote: Mapped[str] = mapped_column(Text, nullable=False)
+    quote_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    locator: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class KnowledgeUpdateProposalRequest(Base):
+    __tablename__ = "knowledge_update_proposal_requests"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["proposal_id", "space_id"],
+            ["knowledge_update_proposals.id", "knowledge_update_proposals.space_id"],
+            name="fk_knowledge_update_proposal_requests_proposal_space",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "proposal_id", "space_id", name="uq_proposal_requests_audit_chain"),
+        UniqueConstraint(
+            "space_id", "idempotency_key", name="uq_knowledge_update_proposal_requests_key"
+        ),
+        CheckConstraint(
+            "operation IN ('create','edit','submit','approve','reject','supersede')",
+            name="ck_knowledge_update_proposal_requests_operation",
+        ),
+        CheckConstraint(
+            "request_hash ~ '^[0-9a-f]{64}$'", name="ck_knowledge_update_proposal_requests_hash"
+        ),
+        CheckConstraint(
+            "expected_version IS NULL OR expected_version > 0",
+            name="ck_knowledge_update_proposal_requests_version",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    proposal_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    operation: Mapped[str] = mapped_column(String(32), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expected_version: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class KnowledgeUpdateProposalTransition(Base):
+    __tablename__ = "knowledge_update_proposal_transitions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["proposal_id", "space_id"],
+            ["knowledge_update_proposals.id", "knowledge_update_proposals.space_id"],
+            name="fk_knowledge_update_proposal_transitions_proposal_space",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["request_id", "proposal_id", "space_id"],
+            [
+                "knowledge_update_proposal_requests.id",
+                "knowledge_update_proposal_requests.proposal_id",
+                "knowledge_update_proposal_requests.space_id",
+            ],
+            name="fk_knowledge_update_proposal_transitions_request_chain",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint(
+            "id", "proposal_id", "space_id", name="uq_proposal_transitions_audit_chain"
+        ),
+        UniqueConstraint("request_id", name="uq_knowledge_update_proposal_transitions_request"),
+        CheckConstraint(
+            "from_version >= 0 AND to_version = from_version + 1",
+            name="ck_knowledge_update_proposal_transitions_versions",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    proposal_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    space_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    request_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    operation: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(1000))
+    before_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    after_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    from_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    from_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    to_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class KnowledgeUpdateProposalResult(Base):
+    __tablename__ = "knowledge_update_proposal_results"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["request_id", "proposal_id", "space_id"],
+            [
+                "knowledge_update_proposal_requests.id",
+                "knowledge_update_proposal_requests.proposal_id",
+                "knowledge_update_proposal_requests.space_id",
+            ],
+            name="fk_knowledge_update_proposal_results_request_chain",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["transition_id", "proposal_id", "space_id"],
+            [
+                "knowledge_update_proposal_transitions.id",
+                "knowledge_update_proposal_transitions.proposal_id",
+                "knowledge_update_proposal_transitions.space_id",
+            ],
+            name="fk_knowledge_update_proposal_results_transition_chain",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("request_id", name="uq_knowledge_update_proposal_results_request"),
+        CheckConstraint(
+            "proposal_version > 0", name="ck_knowledge_update_proposal_results_version"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    request_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    proposal_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    transition_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    space_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    proposal_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    proposal_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

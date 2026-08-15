@@ -363,6 +363,127 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/knowledge-spaces/{space_id}/proposal-requests/{idempotency_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Proposal Request */
+        get: operations["get_knowledge_update_proposal_request"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Proposals */
+        get: operations["list_knowledge_update_proposals"];
+        put?: never;
+        /** Create Proposal */
+        post: operations["create_knowledge_update_proposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/proposals/{proposal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Proposal */
+        get: operations["get_knowledge_update_proposal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Edit Proposal */
+        patch: operations["edit_knowledge_update_proposal"];
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/proposals/{proposal_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Proposal */
+        post: operations["approve_knowledge_update_proposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/proposals/{proposal_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Proposal */
+        post: operations["reject_knowledge_update_proposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/proposals/{proposal_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Proposal */
+        post: operations["submit_knowledge_update_proposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/proposals/{proposal_id}/supersede": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Supersede Proposal */
+        post: operations["supersede_knowledge_update_proposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge-spaces/{space_id}/qa/turns": {
         parameters: {
             query?: never;
@@ -1683,6 +1804,16 @@ export interface components {
             /** Items */
             items: components["schemas"]["KnowledgeNodeResponse"][];
         };
+        /**
+         * KnowledgeUpdateAction
+         * @enum {string}
+         */
+        KnowledgeUpdateAction: "create" | "revise" | "supersede" | "merge_suggestion" | "mark_review_recommended";
+        /**
+         * KnowledgeUpdateProposalEvidenceRole
+         * @enum {string}
+         */
+        KnowledgeUpdateProposalEvidenceRole: "new_support" | "existing_support" | "conflict" | "outdated" | "contextual";
         /** KnowledgeWriteRequestResponse */
         KnowledgeWriteRequestResponse: {
             /** Idempotency Key */
@@ -1776,6 +1907,270 @@ export interface components {
             text: string;
             /** Title */
             title: string;
+        };
+        /** ProposalCreate */
+        ProposalCreate: {
+            action: components["schemas"]["KnowledgeUpdateAction"];
+            /** Comparison Summary */
+            comparison_summary?: string | null;
+            /** Conditions */
+            conditions?: string[];
+            /** Confidence */
+            confidence?: number | null;
+            /** Evidence */
+            evidence: components["schemas"]["ProposalEvidenceInput"][];
+            /** Exceptions */
+            exceptions?: string[];
+            /** Research Run Id */
+            research_run_id?: string | null;
+            /** Suggested Body */
+            suggested_body?: string | null;
+            /** Suggested Tags */
+            suggested_tags?: string[];
+            /** Suggested Title */
+            suggested_title?: string | null;
+            /** Target Node Id */
+            target_node_id?: string | null;
+            /** Target Revision Id */
+            target_revision_id?: string | null;
+            /** Uncertainty Reason */
+            uncertainty_reason?: string | null;
+        };
+        /** ProposalDecision */
+        ProposalDecision: {
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason?: string | null;
+        };
+        /** ProposalDetailResponse */
+        ProposalDetailResponse: {
+            /** Evidence */
+            evidence: components["schemas"]["ProposalEvidenceResponse"][];
+            proposal: components["schemas"]["ProposalItemResponse"];
+            /** Transitions */
+            transitions: components["schemas"]["ProposalTransitionResponse"][];
+        };
+        /** ProposalEdit */
+        ProposalEdit: {
+            /** Comparison Summary */
+            comparison_summary?: string | null;
+            /** Conditions */
+            conditions?: string[] | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Exceptions */
+            exceptions?: string[] | null;
+            /** Expected Version */
+            expected_version: number;
+            /** Suggested Body */
+            suggested_body?: string | null;
+            /** Suggested Tags */
+            suggested_tags?: string[] | null;
+            /** Suggested Title */
+            suggested_title?: string | null;
+            /** Uncertainty Reason */
+            uncertainty_reason?: string | null;
+        };
+        /** ProposalEvidenceInput */
+        ProposalEvidenceInput: {
+            /** Knowledge Revision Id */
+            knowledge_revision_id?: string | null;
+            role: components["schemas"]["KnowledgeUpdateProposalEvidenceRole"];
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+        };
+        /** ProposalEvidenceResponse */
+        ProposalEvidenceResponse: {
+            /** Content Hash */
+            content_hash: string;
+            /** Frozen Quote */
+            frozen_quote: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Knowledge Revision Id */
+            knowledge_revision_id: string | null;
+            /** Locator */
+            locator: {
+                [key: string]: unknown;
+            };
+            /** Ordinal */
+            ordinal: number;
+            /**
+             * Parse Artifact Id
+             * Format: uuid
+             */
+            parse_artifact_id: string;
+            /** Quote Hash */
+            quote_hash: string;
+            /** Role */
+            role: string;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /**
+             * Source Version Id
+             * Format: uuid
+             */
+            source_version_id: string;
+        };
+        /** ProposalItemResponse */
+        ProposalItemResponse: {
+            /** Action */
+            action: string;
+            /** Applied At */
+            applied_at: unknown;
+            /** Comparison Summary */
+            comparison_summary: string | null;
+            /** Conditions */
+            conditions: string[];
+            /** Confidence */
+            confidence: number | null;
+            /** Created At */
+            created_at: unknown;
+            /** Exceptions */
+            exceptions: string[];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Research Run Id */
+            research_run_id: string | null;
+            /** Reviewed At */
+            reviewed_at: unknown;
+            /**
+             * Space Id
+             * Format: uuid
+             */
+            space_id: string;
+            /** Status */
+            status: string;
+            /** Submitted At */
+            submitted_at: unknown;
+            /** Suggested Body */
+            suggested_body: string | null;
+            /** Suggested Tags */
+            suggested_tags: string[];
+            /** Suggested Title */
+            suggested_title: string | null;
+            /** Superseded At */
+            superseded_at: unknown;
+            /** Superseded By Proposal Id */
+            superseded_by_proposal_id: string | null;
+            /** Target Node Id */
+            target_node_id: string | null;
+            /** Target Node Version */
+            target_node_version: number | null;
+            /** Target Revision Id */
+            target_revision_id: string | null;
+            /** Uncertainty Reason */
+            uncertainty_reason: string | null;
+            /** Updated At */
+            updated_at: unknown;
+            /** Version */
+            version: number;
+        };
+        /** ProposalListResponse */
+        ProposalListResponse: {
+            /** Items */
+            items: components["schemas"]["ProposalItemResponse"][];
+        };
+        /** ProposalRequestResponse */
+        ProposalRequestResponse: {
+            /** Action */
+            action: string;
+            /** Idempotency Key */
+            idempotency_key: string;
+            result: components["schemas"]["ProposalResultResponse"];
+        };
+        /** ProposalResultResponse */
+        ProposalResultResponse: {
+            /**
+             * Proposal Id
+             * Format: uuid
+             */
+            proposal_id: string;
+            /** Proposal Status */
+            proposal_status: string;
+            /** Proposal Version */
+            proposal_version: number;
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
+        };
+        /** ProposalSubmit */
+        ProposalSubmit: {
+            /** Expected Version */
+            expected_version: number;
+        };
+        /** ProposalSupersede */
+        ProposalSupersede: {
+            /** Expected Version */
+            expected_version: number;
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Replacement Proposal Id
+             * Format: uuid
+             */
+            replacement_proposal_id: string;
+        };
+        /** ProposalTransitionResponse */
+        ProposalTransitionResponse: {
+            /** Actor */
+            actor: string;
+            /** After Snapshot */
+            after_snapshot: {
+                [key: string]: unknown;
+            };
+            /** Before Snapshot */
+            before_snapshot: {
+                [key: string]: unknown;
+            };
+            /** Created At */
+            created_at: unknown;
+            /** From Status */
+            from_status: string;
+            /** From Version */
+            from_version: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Operation */
+            operation: string;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /** To Status */
+            to_status: string;
+            /** To Version */
+            to_version: number;
         };
         /** QaCitationResponse */
         QaCitationResponse: {
@@ -3172,6 +3567,460 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_knowledge_update_proposal_request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                idempotency_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalRequestResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    list_knowledge_update_proposals: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                action?: string | null;
+                target_node_id?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalListResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_knowledge_update_proposal: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalResultResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_knowledge_update_proposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalDetailResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    edit_knowledge_update_proposal: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalResultResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    approve_knowledge_update_proposal: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalResultResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    reject_knowledge_update_proposal: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalResultResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    submit_knowledge_update_proposal: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalSubmit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalResultResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    supersede_knowledge_update_proposal: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalSupersede"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalResultResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

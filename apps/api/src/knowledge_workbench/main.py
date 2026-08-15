@@ -18,6 +18,7 @@ from knowledge_workbench.api import (
     jobs,
     knowledge_import,
     knowledge_tree,
+    knowledge_update_proposal,
     non_file_sources,
     qa,
     retrieval,
@@ -140,6 +141,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(candidate_review.router)
     app.include_router(knowledge_tree.router)
     app.include_router(knowledge_import.router)
+    app.include_router(knowledge_update_proposal.router)
     app.include_router(retrieval.router)
     app.include_router(qa.router)
     app.include_router(jobs.router)

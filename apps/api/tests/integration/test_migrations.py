@@ -2,9 +2,11 @@ import asyncio
 from pathlib import Path
 from uuid import UUID
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from knowledge_workbench.config import get_settings
 from knowledge_workbench.db.session import create_engine
@@ -77,6 +79,91 @@ async def _clear_migration_test_records() -> None:
                     """
                 )
             )
+    finally:
+        await engine.dispose()
+
+
+async def _seed_proposal_downgrade_guard() -> None:
+    engine = create_engine(get_settings())
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO knowledge_update_proposals (
+                        id, space_id, action, suggested_title
+                    )
+                    SELECT
+                        '01982ba0-4f20-7000-8000-000000000201',
+                        id,
+                        'create',
+                        'Migration downgrade guard'
+                    FROM knowledge_spaces
+                    ORDER BY created_at
+                    LIMIT 1
+                    """
+                )
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _clear_proposal_downgrade_guard() -> None:
+    engine = create_engine(get_settings())
+    try:
+        async with engine.begin() as connection:
+            table = await connection.scalar(
+                text("SELECT to_regclass('public.knowledge_update_proposals')")
+            )
+            if table is not None:
+                await connection.execute(
+                    text(
+                        """
+                        DELETE FROM knowledge_update_proposals
+                        WHERE id = '01982ba0-4f20-7000-8000-000000000201'
+                        """
+                    )
+                )
+    finally:
+        await engine.dispose()
+
+
+async def _seed_research_run_downgrade_guard() -> None:
+    engine = create_engine(get_settings())
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO research_runs (id, space_id, origin)
+                    SELECT
+                        '01982ba0-4f20-7000-8000-000000000202',
+                        id,
+                        'migration-test'
+                    FROM knowledge_spaces
+                    ORDER BY created_at
+                    LIMIT 1
+                    """
+                )
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _clear_research_run_downgrade_guard() -> None:
+    engine = create_engine(get_settings())
+    try:
+        async with engine.begin() as connection:
+            table = await connection.scalar(text("SELECT to_regclass('public.research_runs')"))
+            if table is not None:
+                await connection.execute(
+                    text(
+                        """
+                        DELETE FROM research_runs
+                        WHERE id = '01982ba0-4f20-7000-8000-000000000202'
+                        """
+                    )
+                )
     finally:
         await engine.dispose()
 
@@ -387,3 +474,34 @@ def test_migration_replay() -> None:
     asyncio.run(_assert_knowledge_tree_uuid_contract())
     asyncio.run(_assert_legacy_uuid_references_repaired())
     asyncio.run(_clear_migration_test_records())
+
+
+def test_n21_downgrade_rejects_existing_proposals() -> None:
+    api_root = Path(__file__).resolve().parents[2]
+    config = Config(str(api_root / "alembic.ini"))
+    command.upgrade(config, "head")
+    asyncio.run(_seed_proposal_downgrade_guard())
+
+    try:
+        with pytest.raises(
+            DBAPIError,
+            match="cannot downgrade N2.1 proposal schema while proposal audit records exist",
+        ):
+            command.downgrade(config, "0011_d8_hybrid_qa")
+    finally:
+        asyncio.run(_clear_proposal_downgrade_guard())
+        command.upgrade(config, "head")
+
+    asyncio.run(_seed_research_run_downgrade_guard())
+    try:
+        with pytest.raises(
+            DBAPIError,
+            match="cannot downgrade N2.1 proposal schema while proposal audit records exist",
+        ):
+            command.downgrade(config, "0011_d8_hybrid_qa")
+    finally:
+        asyncio.run(_clear_research_run_downgrade_guard())
+        command.upgrade(config, "head")
+
+    command.downgrade(config, "0011_d8_hybrid_qa")
+    command.upgrade(config, "head")
