@@ -160,10 +160,36 @@ async def _clear_research_run_downgrade_guard() -> None:
                     text(
                         """
                         DELETE FROM research_runs
-                        WHERE id = '01982ba0-4f20-7000-8000-000000000202'
+                        WHERE id IN (
+                            '01982ba0-4f20-7000-8000-000000000202',
+                            '01982ba0-4f20-7000-8000-000000000203'
+                        )
                         """
                     )
                 )
+    finally:
+        await engine.dispose()
+
+
+async def _seed_external_search_downgrade_guard() -> None:
+    engine = create_engine(get_settings())
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO research_runs (id, space_id, origin, query)
+                    SELECT
+                        '01982ba0-4f20-7000-8000-000000000203',
+                        id,
+                        'external_search',
+                        'Migration downgrade guard'
+                    FROM knowledge_spaces
+                    ORDER BY created_at
+                    LIMIT 1
+                    """
+                )
+            )
     finally:
         await engine.dispose()
 
@@ -504,4 +530,24 @@ def test_n21_downgrade_rejects_existing_proposals() -> None:
         command.upgrade(config, "head")
 
     command.downgrade(config, "0011_d8_hybrid_qa")
+    command.upgrade(config, "head")
+
+
+def test_n22_downgrade_rejects_external_search_audit_records() -> None:
+    api_root = Path(__file__).resolve().parents[2]
+    config = Config(str(api_root / "alembic.ini"))
+    command.upgrade(config, "head")
+    asyncio.run(_seed_external_search_downgrade_guard())
+
+    try:
+        with pytest.raises(
+            DBAPIError,
+            match="cannot downgrade N2.2 search schema while research audit records exist",
+        ):
+            command.downgrade(config, "0012_n21_proposal")
+    finally:
+        asyncio.run(_clear_research_run_downgrade_guard())
+        command.upgrade(config, "head")
+
+    command.downgrade(config, "0012_n21_proposal")
     command.upgrade(config, "head")

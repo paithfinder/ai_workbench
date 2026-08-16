@@ -23,13 +23,10 @@ from knowledge_workbench.application.non_file_ingestion import (
     NonFileIngestionRecord,
     NonFileIngestionService,
 )
+from knowledge_workbench.application.web_source_ingestion import ingest_web_source
 from knowledge_workbench.core.errors import ErrorEnvelope
 from knowledge_workbench.infrastructure.non_file_repository import (
     SqlAlchemyNonFileIngestionRepository,
-)
-from knowledge_workbench.infrastructure.web.safe_http import (
-    SafeHttpWebFetcher,
-    normalize_web_url,
 )
 
 router = APIRouter(prefix="/api/v1/knowledge-spaces/{space_id}/sources", tags=["sources"])
@@ -178,60 +175,19 @@ async def create_web_source(
     storage: StorageDependency,
     settings: SettingsDependency,
 ) -> NonFileSourceResponse:
-    requested_url = normalize_web_url(body.url)
     repository = SqlAlchemyNonFileIngestionRepository(session)
-    service = NonFileIngestionService(
-        storage,
-        repository,
-        max_pasted_text_bytes=settings.max_pasted_text_size_bytes,
+    record = await ingest_web_source(
+        session=session,
+        storage=storage,
+        settings=settings,
+        space_id=space_id,
+        title=body.title,
+        url=body.url,
+        idempotency_key=idempotency_key,
     )
     async with session.begin():
-        prepared = await service.prepare_web_source(
-            space_id=space_id,
-            title=body.title,
-            requested_url=requested_url,
-            idempotency_key=idempotency_key,
-        )
-    if prepared.claim.existing_record is not None:
-        async with session.begin():
-            return await _finalize_and_load(
-                repository=repository,
-                record=prepared.claim.existing_record,
-                space_id=space_id,
-            )
-
-    try:
-        fetched = await SafeHttpWebFetcher(
-            connect_timeout_seconds=settings.web_fetch_connect_timeout_seconds,
-            total_timeout_seconds=settings.web_fetch_total_timeout_seconds,
-            max_body_bytes=settings.web_fetch_max_body_bytes,
-            max_redirects=settings.web_fetch_max_redirects,
-        ).fetch(prepared.requested_url)
-        staged = await service.stage_web_snapshot(prepared=prepared, fetched=fetched)
-    except Exception:
-        await _release_claim(
-            session=session,
+        return await _finalize_and_load(
             repository=repository,
+            record=record,
             space_id=space_id,
-            idempotency_key=prepared.idempotency_key,
-            lease_token=prepared.claim.lease_token,
         )
-        raise
-    try:
-        async with session.begin():
-            record = await repository.finalize_web_snapshot(staged)
-            return await _finalize_and_load(
-                repository=repository,
-                record=record,
-                space_id=space_id,
-            )
-    except Exception:
-        await service.discard_staged(staged.storage_key)
-        await _release_claim(
-            session=session,
-            repository=repository,
-            space_id=space_id,
-            idempotency_key=prepared.idempotency_key,
-            lease_token=prepared.claim.lease_token,
-        )
-        raise

@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from knowledge_workbench.api import (
     bootstrap,
     candidate_review,
+    external_research,
     extraction,
     health,
     jobs,
@@ -136,6 +137,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(bootstrap.router)
     app.include_router(sources.router)
     app.include_router(non_file_sources.router)
+    app.include_router(external_research.router)
     app.include_router(source_parsing.router)
     app.include_router(extraction.router)
     app.include_router(candidate_review.router)

@@ -113,6 +113,18 @@ class ResearchRunStatus(StrEnum):
     FAILED = "failed"
 
 
+class ResearchSourceSelectionBatchStatus(StrEnum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    COMPLETED_WITH_FAILURES = "completed_with_failures"
+
+
+class ResearchSourceSelectionStatus(StrEnum):
+    PENDING = "pending"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 class KnowledgeUpdateAction(StrEnum):
     CREATE = "create"
     REVISE = "revise"
@@ -861,6 +873,9 @@ class ResearchRun(Base):
     __table_args__ = (
         UniqueConstraint("id", "space_id", name="uq_research_runs_id_space"),
         CheckConstraint("status IN ('draft','completed','failed')", name="ck_research_runs_status"),
+        CheckConstraint(
+            "query IS NULL OR length(btrim(query)) > 0", name="ck_research_runs_query"
+        ),
         Index("ix_research_runs_space_status_created", "space_id", "status", "created_at"),
     )
 
@@ -873,11 +888,197 @@ class ResearchRun(Base):
     model: Mapped[str | None] = mapped_column(String(200))
     prompt_version: Mapped[str | None] = mapped_column(String(100))
     tool_policy_version: Mapped[str | None] = mapped_column(String(100))
+    query: Mapped[str | None] = mapped_column(Text)
+    provider: Mapped[str | None] = mapped_column(String(100))
+    provider_model: Mapped[str | None] = mapped_column(String(200))
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    search_filters: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=sql_text("'{}'::jsonb")
+    )
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    failure_message: Mapped[str | None] = mapped_column(String(1000))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class ResearchSearchRequest(Base):
+    __tablename__ = "research_search_requests"
+    __table_args__ = (
+        UniqueConstraint("space_id", "idempotency_key", name="uq_research_search_requests_key"),
+        UniqueConstraint(
+            "id",
+            "research_run_id",
+            "space_id",
+            name="uq_research_search_requests_chain",
+        ),
+        ForeignKeyConstraint(
+            ["research_run_id", "space_id"],
+            ["research_runs.id", "research_runs.space_id"],
+            name="fk_research_search_requests_run_space",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("request_hash ~ '^[0-9a-f]{64}$'", name="ck_research_search_requests_hash"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    research_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ResearchSearchResult(Base):
+    __tablename__ = "research_search_results"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["research_run_id", "space_id"],
+            ["research_runs.id", "research_runs.space_id"],
+            name="fk_research_search_results_run_space",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("research_run_id", "ordinal", name="uq_research_search_results_ordinal"),
+        CheckConstraint("ordinal >= 0", name="ck_research_search_results_ordinal"),
+        CheckConstraint("length(btrim(url)) > 0", name="ck_research_search_results_url"),
+        CheckConstraint("length(btrim(title)) > 0", name="ck_research_search_results_title"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    research_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    url: Mapped[str] = mapped_column(String(2000), nullable=False)
+    snippet: Mapped[str | None] = mapped_column(Text)
+    provider_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=sql_text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ResearchSourceSelectionBatch(Base):
+    __tablename__ = "research_source_selection_batches"
+    __table_args__ = (
+        UniqueConstraint(
+            "research_run_id", "idempotency_key", name="uq_research_selection_batches_key"
+        ),
+        UniqueConstraint(
+            "id",
+            "research_run_id",
+            "space_id",
+            name="uq_research_selection_batches_chain",
+        ),
+        ForeignKeyConstraint(
+            ["research_run_id", "space_id"],
+            ["research_runs.id", "research_runs.space_id"],
+            name="fk_research_selection_batches_run_space",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "request_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_research_selection_batches_hash",
+        ),
+        CheckConstraint(
+            "status IN ('pending','completed','completed_with_failures')",
+            name="ck_research_selection_batches_status",
+        ),
+        Index(
+            "ix_research_selection_batches_run_created",
+            "research_run_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    research_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ResearchSourceSelectionBatchStatus.PENDING
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ResearchSourceSelection(Base):
+    __tablename__ = "research_source_selections"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["batch_id", "research_run_id", "space_id"],
+            [
+                "research_source_selection_batches.id",
+                "research_source_selection_batches.research_run_id",
+                "research_source_selection_batches.space_id",
+            ],
+            name="fk_research_source_selections_batch_chain",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["research_run_id", "space_id"],
+            ["research_runs.id", "research_runs.space_id"],
+            name="fk_research_source_selections_run_space",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_id", "space_id"],
+            ["sources.id", "sources.space_id"],
+            name="fk_research_source_selections_source_space",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["source_version_id", "source_id"],
+            ["source_versions.id", "source_versions.source_id"],
+            name="fk_research_source_selections_version_source",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["job_id", "space_id"],
+            ["jobs.id", "jobs.space_id"],
+            name="fk_research_source_selections_job_space",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("ordinal >= 0", name="ck_research_source_selections_ordinal"),
+        CheckConstraint(
+            "status IN ('pending','succeeded','failed')",
+            name="ck_research_source_selections_status",
+        ),
+        CheckConstraint(
+            "length(btrim(requested_url)) > 0",
+            name="ck_research_source_selections_url",
+        ),
+        UniqueConstraint("batch_id", "ordinal", name="uq_research_source_selections_ordinal"),
+        UniqueConstraint("batch_id", "requested_url", name="uq_research_source_selections_url"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    research_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    batch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    requested_url: Mapped[str] = mapped_column(String(2000), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ResearchSourceSelectionStatus.PENDING
+    )
+    source_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    source_version_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    job_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    error_code: Mapped[str | None] = mapped_column(String(100))
+    error_message: Mapped[str | None] = mapped_column(String(1000))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class KnowledgeUpdateProposal(Base):
@@ -1927,6 +2128,7 @@ class QaCitation(Base):
 class Job(TimestampMixin, Base):
     __tablename__ = "jobs"
     __table_args__ = (
+        UniqueConstraint("id", "space_id", name="uq_jobs_id_space"),
         CheckConstraint(
             "kind IN ('source_ingest','source_parse','source_extract','source_index')",
             name="ck_jobs_kind",

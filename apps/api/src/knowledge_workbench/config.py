@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     web_fetch_total_timeout_seconds: float = Field(default=15.0, gt=0, le=300)
     web_fetch_max_body_bytes: int = Field(default=5 * 1024 * 1024, gt=0)
     web_fetch_max_redirects: int = Field(default=5, ge=0, le=20)
+    search_provider: Literal["disabled", "grok"] = "disabled"
+    search_timeout_seconds: float = Field(default=30.0, gt=0, le=300)
+    search_max_results: int = Field(default=10, gt=0, le=50)
+    research_selection_max_urls: int = Field(default=10, gt=0, le=50)
+    grok_search_endpoint: str = "https://api.x.ai/v1/responses"
+    grok_search_model: str = Field(default="grok-4.1-fast", min_length=1, max_length=200)
+    grok_search_api_key: SecretStr | None = None
 
     celery_broker_url: str = "redis://localhost:6379/1"
     job_attempt_lease_seconds: int = Field(default=300, gt=0)

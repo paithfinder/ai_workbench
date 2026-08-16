@@ -535,6 +535,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/knowledge-spaces/{space_id}/research-runs/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Search Research */
+        post: operations["search_external_research"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/research-runs/{research_run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Research Run */
+        get: operations["get_external_research_run"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/research-runs/{research_run_id}/source-selection-batches/{batch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Source Selection Batch */
+        get: operations["get_external_research_source_selection_batch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/research-runs/{research_run_id}/source-selections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Select Research Sources */
+        post: operations["select_external_research_sources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge-spaces/{space_id}/retrieval/debug-search": {
         parameters: {
             query?: never;
@@ -2272,6 +2340,42 @@ export interface components {
             artifact: components["schemas"]["ParseArtifactResponse"];
             job: components["schemas"]["JobResponse"];
         };
+        /** ResearchRunResponse */
+        ResearchRunResponse: {
+            /** Completed At */
+            completed_at: unknown;
+            /** Created At */
+            created_at: unknown;
+            /** Failure Code */
+            failure_code: string | null;
+            /** Failure Message */
+            failure_message: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Origin */
+            origin: string;
+            /** Provider */
+            provider: string | null;
+            /** Provider Model */
+            provider_model: string | null;
+            /** Provider Request Id */
+            provider_request_id: string | null;
+            /** Query */
+            query: string | null;
+            /** Results */
+            results: components["schemas"]["SearchResultResponse"][];
+            /** Search Filters */
+            search_filters: {
+                [key: string]: string;
+            };
+            /** Started At */
+            started_at: unknown;
+            /** Status */
+            status: string;
+        };
         /** ReserveUploadRequest */
         ReserveUploadRequest: {
             /** Content Sha256 */
@@ -2334,6 +2438,37 @@ export interface components {
             source_count: number;
             /** Source Version Count */
             source_version_count: number;
+        };
+        /** SearchResearchRequest */
+        SearchResearchRequest: {
+            /** Filters */
+            filters?: {
+                [key: string]: string;
+            };
+            /** Max Results */
+            max_results?: number | null;
+            /** Query */
+            query: string;
+        };
+        /** SearchResultResponse */
+        SearchResultResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Ordinal */
+            ordinal: number;
+            /** Provider Metadata */
+            provider_metadata: {
+                [key: string]: string;
+            };
+            /** Snippet */
+            snippet: string | null;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
         };
         /** SectionResponse */
         SectionResponse: {
@@ -2433,6 +2568,67 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** SourceSelectionBatchResponse */
+        SourceSelectionBatchResponse: {
+            /** Completed At */
+            completed_at: unknown;
+            /** Created At */
+            created_at: unknown;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Research Run Id
+             * Format: uuid
+             */
+            research_run_id: string;
+            /** Selections */
+            selections: components["schemas"]["SourceSelectionResponse"][];
+            /** Status */
+            status: string;
+        };
+        /** SourceSelectionInput */
+        SourceSelectionInput: {
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+        };
+        /** SourceSelectionRequest */
+        SourceSelectionRequest: {
+            /** Selections */
+            selections: components["schemas"]["SourceSelectionInput"][];
+        };
+        /** SourceSelectionResponse */
+        SourceSelectionResponse: {
+            /** Completed At */
+            completed_at: unknown;
+            /** Error Code */
+            error_code: string | null;
+            /** Error Message */
+            error_message: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Job Id */
+            job_id: string | null;
+            /** Ordinal */
+            ordinal: number;
+            /** Requested Url */
+            requested_url: string;
+            /** Source Id */
+            source_id: string | null;
+            /** Source Version Id */
+            source_version_id: string | null;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
         };
         /** SourceVersionDetailResponse */
         SourceVersionDetailResponse: {
@@ -4194,6 +4390,236 @@ export interface operations {
             };
             /** @description Internal Server Error */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    search_external_research: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchResearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchRunResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_external_research_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                research_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchRunResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_external_research_source_selection_batch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                research_run_id: string;
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSelectionBatchResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_external_research_sources: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+                research_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSelectionBatchResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
