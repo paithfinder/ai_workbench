@@ -266,6 +266,51 @@ async def test_create_submit_approve_is_exactly_once_and_does_not_write_knowledg
     ) == 3
 
 
+async def test_create_comparison_draft_replays_same_comparison_run(
+    postgres_session: AsyncSession,
+) -> None:
+    section = await _seed_ready_section(postgres_session)
+    service = KnowledgeUpdateProposalService()
+    comparison_run_id = uuid4()
+
+    created = await service.create_comparison_draft(
+        postgres_session,
+        space_id=DEFAULT_SPACE_ID,
+        comparison_run_id=comparison_run_id,
+        request=_create_request(section),
+    )
+    replay = await service.create_comparison_draft(
+        postgres_session,
+        space_id=DEFAULT_SPACE_ID,
+        comparison_run_id=comparison_run_id,
+        request=_create_request(section).model_copy(
+            update={"suggested_title": "Recovered comparison title"}
+        ),
+    )
+
+    assert replay == created
+    assert await postgres_session.scalar(
+        select(func.count()).select_from(KnowledgeUpdateProposalRequest).where(
+            KnowledgeUpdateProposalRequest.proposal_id == created.proposal_id
+        )
+    ) == 1
+    assert await postgres_session.scalar(
+        select(func.count()).select_from(KnowledgeUpdateProposalTransition).where(
+            KnowledgeUpdateProposalTransition.proposal_id == created.proposal_id
+        )
+    ) == 1
+    assert await postgres_session.scalar(
+        select(func.count())
+        .select_from(ActivityEvent)
+        .where(ActivityEvent.entity_id == created.proposal_id)
+    ) == 1
+    assert await postgres_session.scalar(
+        select(func.count())
+        .select_from(OutboxEvent)
+        .where(OutboxEvent.aggregate_id == created.proposal_id)
+    ) == 1
+
+
 async def test_same_idempotency_key_cannot_replay_another_proposal(
     postgres_session: AsyncSession,
 ) -> None:

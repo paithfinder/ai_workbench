@@ -127,3 +127,46 @@ async def test_hybrid_service_preserves_keyword_when_vector_and_reranker_fail() 
         "vector_unavailable: embedding offline",
         "reranker_fallback: reranker offline",
     ]
+
+
+async def test_confirmed_knowledge_retrieval_uses_isolated_channels_and_configuration() -> None:
+    chunk = _chunk()
+    channels = AsyncMock()
+    channels.confirmed_knowledge_keyword.return_value = [RetrievalHit(chunk, 1, 0.8)]
+    channels.confirmed_knowledge_vector.return_value = []
+
+    session = AsyncMock()
+    result = await HybridRetrievalService(channels).retrieve_confirmed_knowledge(
+        session,
+        settings=Settings(app_env="test"),  # type: ignore[arg-type]
+        scope=ResolvedScope(
+            space_id=uuid4(),
+            scope_node_id=uuid4(),
+            scope_ltree="n1",
+            scope_path="测试范围",
+            node_kind="folder",
+            node_title="测试范围",
+            include_descendants=True,
+            knowledge_count=1,
+            source_count=0,
+            source_version_count=0,
+            chunk_count=1,
+            index_status="ready",
+            index_config_version="d7-v1",
+            scope_snapshot_hash="a" * 64,
+        ),
+        query="question",
+        embedding_gateway=AsyncMock(),
+        reranker_gateway=None,
+        candidate_top_k=7,
+        rrf_k=42,
+    )
+
+    assert [hit.chunk.id for hit in result.hits] == [chunk.id]
+    channels.confirmed_knowledge_keyword.assert_awaited_once()
+    channels.confirmed_knowledge_vector.assert_awaited_once()
+    assert channels.confirmed_knowledge_keyword.await_args.kwargs["top_k"] == 7
+    assert channels.confirmed_knowledge_vector.await_args.kwargs["top_k"] == 7
+    channels.keyword.assert_not_called()
+    channels.vector.assert_not_called()
+    assert result.hits[0].rrf_score == 1 / 43

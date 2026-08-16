@@ -197,18 +197,11 @@ class ScopeResolver:
     def scope_predicates(
         *, settings: Settings, space_id: UUID, scope_path: str, include_descendants: bool
     ) -> tuple[ColumnElement[bool], ...]:
-        path_predicate = (
-            RetrievalChunk.path.op("<@")(scope_path)
-            if include_descendants
-            else RetrievalChunk.path == scope_path
-        )
-        current_knowledge = exists(
-            select(KnowledgeNode.id).where(
-                KnowledgeNode.id == RetrievalChunk.knowledge_node_id,
-                KnowledgeNode.space_id == RetrievalChunk.space_id,
-                KnowledgeNode.current_revision_id == RetrievalChunk.knowledge_revision_id,
-                KnowledgeNode.deleted_at.is_(None),
-            )
+        predicates, current_knowledge = ScopeResolver._base_scope_predicates(
+            settings=settings,
+            space_id=space_id,
+            scope_path=scope_path,
+            include_descendants=include_descendants,
         )
         latest_version = aliased(SourceVersion)
         newer_ready_version = aliased(SourceVersion)
@@ -234,15 +227,54 @@ class ScopeResolver:
                 )
             )
         )
-        current_identity = or_(
-            and_(RetrievalChunk.corpus_kind == "confirmed_knowledge", current_knowledge),
-            and_(RetrievalChunk.corpus_kind == "source_evidence", current_source),
+        return (
+            *predicates,
+            or_(
+                and_(RetrievalChunk.corpus_kind == "confirmed_knowledge", current_knowledge),
+                and_(RetrievalChunk.corpus_kind == "source_evidence", current_source),
+            ),
+        )
+
+    @staticmethod
+    def confirmed_knowledge_predicates(
+        *, settings: Settings, space_id: UUID, scope_path: str, include_descendants: bool
+    ) -> tuple[ColumnElement[bool], ...]:
+        predicates, current_knowledge = ScopeResolver._base_scope_predicates(
+            settings=settings,
+            space_id=space_id,
+            scope_path=scope_path,
+            include_descendants=include_descendants,
         )
         return (
-            RetrievalChunk.space_id == space_id,
-            RetrievalChunk.active.is_(True),
-            RetrievalChunk.index_config_version == settings.index_version,
-            RetrievalChunk.embedding_model == settings.embedding_model,
-            path_predicate,
-            current_identity,
+            *predicates,
+            RetrievalChunk.corpus_kind == "confirmed_knowledge",
+            current_knowledge,
+        )
+
+    @staticmethod
+    def _base_scope_predicates(
+        *, settings: Settings, space_id: UUID, scope_path: str, include_descendants: bool
+    ) -> tuple[tuple[ColumnElement[bool], ...], ColumnElement[bool]]:
+        path_predicate = (
+            RetrievalChunk.path.op("<@")(scope_path)
+            if include_descendants
+            else RetrievalChunk.path == scope_path
+        )
+        current_knowledge = exists(
+            select(KnowledgeNode.id).where(
+                KnowledgeNode.id == RetrievalChunk.knowledge_node_id,
+                KnowledgeNode.space_id == RetrievalChunk.space_id,
+                KnowledgeNode.current_revision_id == RetrievalChunk.knowledge_revision_id,
+                KnowledgeNode.deleted_at.is_(None),
+            )
+        )
+        return (
+            (
+                RetrievalChunk.space_id == space_id,
+                RetrievalChunk.active.is_(True),
+                RetrievalChunk.index_config_version == settings.index_version,
+                RetrievalChunk.embedding_model == settings.embedding_model,
+                path_predicate,
+            ),
+            current_knowledge,
         )

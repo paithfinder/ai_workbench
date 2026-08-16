@@ -363,6 +363,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/knowledge-spaces/{space_id}/proposal-comparisons/{comparison_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Proposal Comparison */
+        get: operations["get_proposal_comparison"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge-spaces/{space_id}/proposal-requests/{idempotency_key}": {
         parameters: {
             query?: never;
@@ -563,6 +580,23 @@ export interface paths {
         get: operations["get_external_research_run"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/knowledge-spaces/{space_id}/research-runs/{research_run_id}/proposal-comparisons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Proposal Comparison */
+        post: operations["create_proposal_comparison"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1975,6 +2009,173 @@ export interface components {
             text: string;
             /** Title */
             title: string;
+        };
+        /** ProposalComparisonCandidateResponse */
+        ProposalComparisonCandidateResponse: {
+            /** Candidate Id */
+            candidate_id: string;
+            /** Candidate Kind */
+            candidate_kind: string;
+            /** Content Hash */
+            content_hash: string;
+            /** Context Ordinal */
+            context_ordinal: number | null;
+            /** Included In Context */
+            included_in_context: boolean;
+            /** Keyword Rank */
+            keyword_rank: number | null;
+            /** Keyword Score */
+            keyword_score: number | null;
+            /** Knowledge Evidence Id */
+            knowledge_evidence_id: string | null;
+            /** Knowledge Node Id */
+            knowledge_node_id: string | null;
+            /** Knowledge Revision Id */
+            knowledge_revision_id: string | null;
+            /** Locator */
+            locator: {
+                [key: string]: unknown;
+            };
+            /** Ordinal */
+            ordinal: number;
+            /**
+             * Parse Artifact Id
+             * Format: uuid
+             */
+            parse_artifact_id: string;
+            /** Quote Hash */
+            quote_hash: string;
+            /** Rerank Rank */
+            rerank_rank: number | null;
+            /** Rerank Score */
+            rerank_score: number | null;
+            /** Rrf Rank */
+            rrf_rank: number | null;
+            /** Rrf Score */
+            rrf_score: number | null;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Selection Id */
+            selection_id: string | null;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /**
+             * Source Version Id
+             * Format: uuid
+             */
+            source_version_id: string;
+            /** Title */
+            title: string | null;
+            /** Vector Rank */
+            vector_rank: number | null;
+            /** Vector Score */
+            vector_score: number | null;
+        };
+        /** ProposalComparisonRequest */
+        ProposalComparisonRequest: {
+            scope: components["schemas"]["ProposalComparisonScope"];
+            /**
+             * Selection Batch Id
+             * Format: uuid
+             */
+            selection_batch_id: string;
+        };
+        /** ProposalComparisonResponse */
+        ProposalComparisonResponse: {
+            /** Ai Model */
+            ai_model: string;
+            /** Ai Provider */
+            ai_provider: string;
+            /** Candidates */
+            candidates: components["schemas"]["ProposalComparisonCandidateResponse"][];
+            /** Comparison Kind */
+            comparison_kind: string | null;
+            /** Completed At */
+            completed_at: unknown;
+            /** Context Config */
+            context_config: {
+                [key: string]: unknown;
+            };
+            /** Created At */
+            created_at: unknown;
+            /** Failure Code */
+            failure_code: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Include Descendants */
+            include_descendants: boolean;
+            /** Index Config Version */
+            index_config_version: string | null;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Prompt Version */
+            prompt_version: string;
+            /** Proposal Id */
+            proposal_id: string | null;
+            /** Provider Request Id */
+            provider_request_id: string | null;
+            /** Reranker Config */
+            reranker_config: {
+                [key: string]: unknown;
+            };
+            /**
+             * Research Run Id
+             * Format: uuid
+             */
+            research_run_id: string;
+            /** Retrieval Config */
+            retrieval_config: {
+                [key: string]: unknown;
+            };
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Scope Node Id
+             * Format: uuid
+             */
+            scope_node_id: string;
+            /** Scope Snapshot */
+            scope_snapshot: {
+                [key: string]: unknown;
+            };
+            /** Scope Snapshot Hash */
+            scope_snapshot_hash: string;
+            /**
+             * Selection Batch Id
+             * Format: uuid
+             */
+            selection_batch_id: string;
+            /** Started At */
+            started_at: unknown;
+            /** Status */
+            status: string;
+            /** Timings Ms */
+            timings_ms: {
+                [key: string]: unknown;
+            };
+            /** Warnings */
+            warnings: string[];
+        };
+        /** ProposalComparisonScope */
+        ProposalComparisonScope: {
+            /**
+             * Include Descendants
+             * @default true
+             */
+            include_descendants: boolean;
+            /** Scope Node Id */
+            scope_node_id?: string | null;
         };
         /** ProposalCreate */
         ProposalCreate: {
@@ -3781,6 +3982,47 @@ export interface operations {
             };
         };
     };
+    get_proposal_comparison: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                space_id: string;
+                comparison_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalComparisonResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_knowledge_update_proposal_request: {
         parameters: {
             query?: never;
@@ -4509,6 +4751,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_proposal_comparison: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+                research_run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalComparisonRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalComparisonResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
                 };
             };
         };

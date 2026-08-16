@@ -96,6 +96,16 @@ class Settings(BaseSettings):
     qa_timeout_seconds: float = Field(default=180.0, gt=0, le=600)
     qa_processing_timeout_seconds: float = Field(default=240.0, gt=0, le=3600)
     qa_processing_sweep_interval_seconds: float = Field(default=60.0, gt=0, le=600)
+
+    proposal_comparison_candidate_top_k: int = Field(default=20, gt=0, le=100)
+    proposal_comparison_rrf_k: int = Field(default=60, gt=0, le=1000)
+    proposal_comparison_context_max_chunks: int = Field(default=8, gt=0, le=50)
+    proposal_comparison_context_max_characters: int = Field(default=14_000, gt=0, le=100_000)
+    proposal_comparison_context_max_chunk_characters: int = Field(default=3_000, gt=0, le=20_000)
+    proposal_comparison_max_output_tokens: int = Field(default=4_000, gt=0, le=16_000)
+    proposal_comparison_timeout_seconds: float = Field(default=180.0, gt=0, le=600)
+    proposal_comparison_processing_timeout_seconds: float = Field(default=240.0, gt=0, le=3600)
+
     reranker_provider: Literal["disabled", "fake", "bge_http"] = "disabled"
     reranker_url: str = "http://localhost:8081/rerank"
     reranker_model: str = "BAAI/bge-reranker-v2-m3"

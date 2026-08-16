@@ -125,6 +125,27 @@ class ResearchSourceSelectionStatus(StrEnum):
     FAILED = "failed"
 
 
+class ProposalComparisonRunStatus(StrEnum):
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    NO_EVIDENCE = "no_evidence"
+    FAILED = "failed"
+
+
+class ProposalComparisonKind(StrEnum):
+    SUPPORT = "support"
+    SUPPLEMENT = "supplement"
+    CONFLICT = "conflict"
+    OUTDATED = "outdated"
+    DUPLICATE = "duplicate"
+    NO_EVIDENCE = "no_evidence"
+
+
+class ProposalComparisonCandidateKind(StrEnum):
+    NEW_SOURCE = "new_source"
+    EXISTING_EVIDENCE = "existing_evidence"
+
+
 class KnowledgeUpdateAction(StrEnum):
     CREATE = "create"
     REVISE = "revise"
@@ -1079,6 +1100,249 @@ class ResearchSourceSelection(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProposalComparisonRun(Base):
+    __tablename__ = "proposal_comparison_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "space_id", "idempotency_key", name="uq_proposal_comparison_runs_space_key"
+        ),
+        UniqueConstraint("id", "space_id", name="uq_proposal_comparison_runs_id_space"),
+        UniqueConstraint("proposal_id", name="uq_proposal_comparison_runs_proposal"),
+        ForeignKeyConstraint(
+            ["research_run_id", "space_id"],
+            ["research_runs.id", "research_runs.space_id"],
+            name="fk_proposal_comparison_runs_research_run_space",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["selection_batch_id", "research_run_id", "space_id"],
+            [
+                "research_source_selection_batches.id",
+                "research_source_selection_batches.research_run_id",
+                "research_source_selection_batches.space_id",
+            ],
+            name="fk_proposal_comparison_runs_selection_batch_chain",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["scope_node_id", "space_id"],
+            ["knowledge_nodes.id", "knowledge_nodes.space_id"],
+            name="fk_proposal_comparison_runs_scope_space",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["proposal_id", "space_id"],
+            ["knowledge_update_proposals.id", "knowledge_update_proposals.space_id"],
+            name="fk_proposal_comparison_runs_proposal_space",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "request_hash ~ '^[0-9a-f]{64}$'", name="ck_proposal_comparison_runs_request_hash"
+        ),
+        CheckConstraint(
+            "scope_snapshot_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_proposal_comparison_runs_scope_hash",
+        ),
+        CheckConstraint(
+            "status IN ('processing','completed','no_evidence','failed')",
+            name="ck_proposal_comparison_runs_status",
+        ),
+        CheckConstraint(
+            "comparison_kind IS NULL OR comparison_kind IN "
+            "('support','supplement','conflict','outdated','duplicate','no_evidence')",
+            name="ck_proposal_comparison_runs_kind",
+        ),
+        CheckConstraint(
+            "input_tokens >= 0 AND output_tokens >= 0",
+            name="ck_proposal_comparison_runs_tokens",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(scope_snapshot) = 'object' "
+            "AND jsonb_typeof(retrieval_config) = 'object' "
+            "AND jsonb_typeof(reranker_config) = 'object' "
+            "AND jsonb_typeof(context_config) = 'object' "
+            "AND jsonb_typeof(timings_ms) = 'object' "
+            "AND jsonb_typeof(warnings) = 'array'",
+            name="ck_proposal_comparison_runs_json_shapes",
+        ),
+        CheckConstraint(
+            "(status = 'processing' AND comparison_kind IS NULL AND proposal_id IS NULL "
+            "AND failure_code IS NULL AND failure_message IS NULL AND completed_at IS NULL) OR "
+            "(status = 'completed' AND comparison_kind IS NOT NULL "
+            "AND comparison_kind <> 'no_evidence' AND proposal_id IS NOT NULL "
+            "AND failure_code IS NULL AND completed_at IS NOT NULL) OR "
+            "(status = 'no_evidence' AND comparison_kind = 'no_evidence' "
+            "AND proposal_id IS NULL AND failure_code IS NULL AND completed_at IS NOT NULL) OR "
+            "(status = 'failed' AND comparison_kind IS NULL AND proposal_id IS NULL "
+            "AND failure_code IS NOT NULL AND completed_at IS NOT NULL)",
+            name="ck_proposal_comparison_runs_result_shape",
+        ),
+        Index("ix_proposal_comparison_runs_space_created", "space_id", "created_at"),
+        Index(
+            "ix_proposal_comparison_runs_space_status_created",
+            "space_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_proposal_comparison_runs_research_batch",
+            "research_run_id",
+            "selection_batch_id",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    space_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("knowledge_spaces.id", ondelete="RESTRICT"), nullable=False
+    )
+    research_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    selection_batch_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    scope_node_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    include_descendants: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    scope_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    scope_snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    index_config_version: Mapped[str | None] = mapped_column(String(100))
+    retrieval_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    reranker_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    context_config: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    ai_provider: Mapped[str] = mapped_column(String(100), nullable=False)
+    ai_model: Mapped[str] = mapped_column(String(200), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=ProposalComparisonRunStatus.PROCESSING
+    )
+    comparison_kind: Mapped[str | None] = mapped_column(String(32))
+    proposal_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    failure_code: Mapped[str | None] = mapped_column(String(100))
+    failure_message: Mapped[str | None] = mapped_column(String(2000))
+    input_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    output_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    timings_ms: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=sql_text("'{}'::jsonb")
+    )
+    warnings: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sql_text("'[]'::jsonb")
+    )
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class ProposalComparisonCandidate(Base):
+    __tablename__ = "proposal_comparison_candidates"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["comparison_run_id", "space_id"],
+            ["proposal_comparison_runs.id", "proposal_comparison_runs.space_id"],
+            name="fk_proposal_comparison_candidates_run_space",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint(
+            "comparison_run_id", "ordinal", name="uq_proposal_comparison_candidates_ordinal"
+        ),
+        UniqueConstraint(
+            "comparison_run_id", "candidate_id", name="uq_proposal_comparison_candidates_id"
+        ),
+        CheckConstraint("ordinal >= 0", name="ck_proposal_comparison_candidates_ordinal"),
+        CheckConstraint(
+            "candidate_kind IN ('new_source','existing_evidence')",
+            name="ck_proposal_comparison_candidates_kind",
+        ),
+        CheckConstraint(
+            "content_hash ~ '^[0-9a-f]{64}$' AND quote_hash ~ '^[0-9a-f]{64}$'",
+            name="ck_proposal_comparison_candidates_hashes",
+        ),
+        CheckConstraint("length(btrim(frozen_quote)) > 0", name="ck_proposal_comparison_candidates_quote"),
+        CheckConstraint(
+            "(keyword_rank IS NULL OR keyword_rank > 0) "
+            "AND (vector_rank IS NULL OR vector_rank > 0) "
+            "AND (rrf_rank IS NULL OR rrf_rank > 0) "
+            "AND (rerank_rank IS NULL OR rerank_rank > 0)",
+            name="ck_proposal_comparison_candidates_ranks",
+        ),
+        CheckConstraint(
+            "(rrf_score IS NULL OR rrf_score NOT IN ('NaN'::double precision, "
+            "'Infinity'::double precision, '-Infinity'::double precision)) "
+            "AND (keyword_score IS NULL OR keyword_score NOT IN ('NaN'::double precision, "
+            "'Infinity'::double precision, '-Infinity'::double precision)) "
+            "AND (vector_score IS NULL OR vector_score NOT IN ('NaN'::double precision, "
+            "'Infinity'::double precision, '-Infinity'::double precision)) "
+            "AND (rerank_score IS NULL OR rerank_score NOT IN ('NaN'::double precision, "
+            "'Infinity'::double precision, '-Infinity'::double precision))",
+            name="ck_proposal_comparison_candidates_scores",
+        ),
+        CheckConstraint(
+            "(included_in_context AND context_ordinal IS NOT NULL "
+            "AND context_ordinal >= 0) OR "
+            "(NOT included_in_context AND context_ordinal IS NULL)",
+            name="ck_proposal_comparison_candidates_context",
+        ),
+        CheckConstraint(
+            "(candidate_kind = 'new_source' AND selection_id IS NOT NULL "
+            "AND source_id IS NOT NULL AND source_version_id IS NOT NULL "
+            "AND parse_artifact_id IS NOT NULL AND section_id IS NOT NULL "
+            "AND knowledge_node_id IS NULL AND knowledge_revision_id IS NULL "
+            "AND knowledge_evidence_id IS NULL) OR "
+            "(candidate_kind = 'existing_evidence' AND selection_id IS NULL "
+            "AND source_id IS NOT NULL AND source_version_id IS NOT NULL "
+            "AND parse_artifact_id IS NOT NULL AND section_id IS NOT NULL "
+            "AND knowledge_node_id IS NOT NULL AND knowledge_revision_id IS NOT NULL "
+            "AND knowledge_evidence_id IS NOT NULL)",
+            name="ck_proposal_comparison_candidates_identity_shape",
+        ),
+        Index(
+            "ix_proposal_comparison_candidates_run_ordinal", "comparison_run_id", "ordinal"
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    comparison_run_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    space_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    candidate_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    candidate_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    selection_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    source_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    source_version_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    parse_artifact_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    section_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    knowledge_node_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    knowledge_revision_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    knowledge_evidence_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    title: Mapped[str | None] = mapped_column(String(1000))
+    frozen_quote: Mapped[str] = mapped_column(Text, nullable=False)
+    quote_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    locator: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    keyword_rank: Mapped[int | None] = mapped_column(Integer)
+    keyword_score: Mapped[float | None] = mapped_column(Float)
+    vector_rank: Mapped[int | None] = mapped_column(Integer)
+    vector_score: Mapped[float | None] = mapped_column(Float)
+    rrf_rank: Mapped[int | None] = mapped_column(Integer)
+    rrf_score: Mapped[float | None] = mapped_column(Float)
+    rerank_rank: Mapped[int | None] = mapped_column(Integer)
+    rerank_score: Mapped[float | None] = mapped_column(Float)
+    included_in_context: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sql_text("false")
+    )
+    context_ordinal: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class KnowledgeUpdateProposal(Base):

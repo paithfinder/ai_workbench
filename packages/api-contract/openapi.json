@@ -2987,6 +2987,485 @@
         "title": "PastedTextRequest",
         "type": "object"
       },
+      "ProposalComparisonCandidateResponse": {
+        "properties": {
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "candidate_kind": {
+            "title": "Candidate Kind",
+            "type": "string"
+          },
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "context_ordinal": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Ordinal"
+          },
+          "included_in_context": {
+            "title": "Included In Context",
+            "type": "boolean"
+          },
+          "keyword_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword Rank"
+          },
+          "keyword_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword Score"
+          },
+          "knowledge_evidence_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Evidence Id"
+          },
+          "knowledge_node_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Node Id"
+          },
+          "knowledge_revision_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Revision Id"
+          },
+          "locator": {
+            "additionalProperties": true,
+            "title": "Locator",
+            "type": "object"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "parse_artifact_id": {
+            "format": "uuid",
+            "title": "Parse Artifact Id",
+            "type": "string"
+          },
+          "quote_hash": {
+            "title": "Quote Hash",
+            "type": "string"
+          },
+          "rerank_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Rank"
+          },
+          "rerank_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Score"
+          },
+          "rrf_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrf Rank"
+          },
+          "rrf_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rrf Score"
+          },
+          "section_id": {
+            "format": "uuid",
+            "title": "Section Id",
+            "type": "string"
+          },
+          "selection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Id"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_version_id": {
+            "format": "uuid",
+            "title": "Source Version Id",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "vector_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Rank"
+          },
+          "vector_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Score"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "ordinal",
+          "candidate_kind",
+          "selection_id",
+          "source_id",
+          "source_version_id",
+          "parse_artifact_id",
+          "section_id",
+          "knowledge_node_id",
+          "knowledge_revision_id",
+          "knowledge_evidence_id",
+          "title",
+          "quote_hash",
+          "content_hash",
+          "locator",
+          "keyword_rank",
+          "keyword_score",
+          "vector_rank",
+          "vector_score",
+          "rrf_rank",
+          "rrf_score",
+          "rerank_rank",
+          "rerank_score",
+          "included_in_context",
+          "context_ordinal"
+        ],
+        "title": "ProposalComparisonCandidateResponse",
+        "type": "object"
+      },
+      "ProposalComparisonRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/ProposalComparisonScope"
+          },
+          "selection_batch_id": {
+            "format": "uuid",
+            "title": "Selection Batch Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selection_batch_id",
+          "scope"
+        ],
+        "title": "ProposalComparisonRequest",
+        "type": "object"
+      },
+      "ProposalComparisonResponse": {
+        "properties": {
+          "ai_model": {
+            "title": "Ai Model",
+            "type": "string"
+          },
+          "ai_provider": {
+            "title": "Ai Provider",
+            "type": "string"
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalComparisonCandidateResponse"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "comparison_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparison Kind"
+          },
+          "completed_at": {
+            "title": "Completed At"
+          },
+          "context_config": {
+            "additionalProperties": true,
+            "title": "Context Config",
+            "type": "object"
+          },
+          "created_at": {
+            "title": "Created At"
+          },
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "include_descendants": {
+            "title": "Include Descendants",
+            "type": "boolean"
+          },
+          "index_config_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Config Version"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "provider_request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Request Id"
+          },
+          "reranker_config": {
+            "additionalProperties": true,
+            "title": "Reranker Config",
+            "type": "object"
+          },
+          "research_run_id": {
+            "format": "uuid",
+            "title": "Research Run Id",
+            "type": "string"
+          },
+          "retrieval_config": {
+            "additionalProperties": true,
+            "title": "Retrieval Config",
+            "type": "object"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "scope_node_id": {
+            "format": "uuid",
+            "title": "Scope Node Id",
+            "type": "string"
+          },
+          "scope_snapshot": {
+            "additionalProperties": true,
+            "title": "Scope Snapshot",
+            "type": "object"
+          },
+          "scope_snapshot_hash": {
+            "title": "Scope Snapshot Hash",
+            "type": "string"
+          },
+          "selection_batch_id": {
+            "format": "uuid",
+            "title": "Selection Batch Id",
+            "type": "string"
+          },
+          "started_at": {
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "timings_ms": {
+            "additionalProperties": true,
+            "title": "Timings Ms",
+            "type": "object"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "research_run_id",
+          "selection_batch_id",
+          "scope_node_id",
+          "include_descendants",
+          "scope_snapshot",
+          "scope_snapshot_hash",
+          "index_config_version",
+          "retrieval_config",
+          "reranker_config",
+          "context_config",
+          "ai_provider",
+          "ai_model",
+          "prompt_version",
+          "schema_version",
+          "status",
+          "comparison_kind",
+          "proposal_id",
+          "failure_code",
+          "input_tokens",
+          "output_tokens",
+          "timings_ms",
+          "warnings",
+          "provider_request_id",
+          "started_at",
+          "completed_at",
+          "created_at",
+          "candidates"
+        ],
+        "title": "ProposalComparisonResponse",
+        "type": "object"
+      },
+      "ProposalComparisonScope": {
+        "additionalProperties": false,
+        "properties": {
+          "include_descendants": {
+            "default": true,
+            "title": "Include Descendants",
+            "type": "boolean"
+          },
+          "scope_node_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Node Id"
+          }
+        },
+        "title": "ProposalComparisonScope",
+        "type": "object"
+      },
       "ProposalCreate": {
         "additionalProperties": false,
         "properties": {
@@ -6953,6 +7432,69 @@
         ]
       }
     },
+    "/api/v1/knowledge-spaces/{space_id}/proposal-comparisons/{comparison_id}": {
+      "get": {
+        "operationId": "get_proposal_comparison",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "comparison_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Comparison Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalComparisonResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Proposal Comparison",
+        "tags": [
+          "proposal-comparisons"
+        ]
+      }
+    },
     "/api/v1/knowledge-spaces/{space_id}/proposal-requests/{idempotency_key}": {
       "get": {
         "operationId": "get_knowledge_update_proposal_request",
@@ -8148,6 +8690,110 @@
         "summary": "Get Research Run",
         "tags": [
           "external-research"
+        ]
+      }
+    },
+    "/api/v1/knowledge-spaces/{space_id}/research-runs/{research_run_id}/proposal-comparisons": {
+      "post": {
+        "operationId": "create_proposal_comparison",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "research_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Research Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalComparisonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalComparisonResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Create Proposal Comparison",
+        "tags": [
+          "proposal-comparisons"
         ]
       }
     },

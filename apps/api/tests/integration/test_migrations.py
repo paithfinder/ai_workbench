@@ -194,6 +194,140 @@ async def _seed_external_search_downgrade_guard() -> None:
         await engine.dispose()
 
 
+async def _seed_comparison_downgrade_guard() -> None:
+    engine = create_engine(get_settings())
+    try:
+        async with engine.begin() as connection:
+            space_id, scope_node_id = (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT space.id, root.id
+                        FROM knowledge_spaces space
+                        JOIN knowledge_nodes root
+                          ON root.space_id = space.id
+                         AND root.kind = 'root'
+                         AND root.deleted_at IS NULL
+                        ORDER BY space.created_at
+                        LIMIT 1
+                        """
+                    )
+                )
+            ).one()
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO research_runs (id, space_id, origin, status)
+                    VALUES (
+                        '01982ba0-4f20-7000-8000-000000000204',
+                        :space_id,
+                        'migration-test',
+                        'completed'
+                    )
+                    """
+                ),
+                {"space_id": space_id},
+            )
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO research_source_selection_batches (
+                        id, space_id, research_run_id, idempotency_key, request_hash, status
+                    ) VALUES (
+                        '01982ba0-4f20-7000-8000-000000000205',
+                        :space_id,
+                        '01982ba0-4f20-7000-8000-000000000204',
+                        'migration-comparison-batch',
+                        :request_hash,
+                        'completed'
+                    )
+                    """
+                ),
+                {"space_id": space_id, "request_hash": "a" * 64},
+            )
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO proposal_comparison_runs (
+                        id, space_id, research_run_id, selection_batch_id, idempotency_key,
+                        request_hash, scope_node_id, include_descendants, scope_snapshot,
+                        scope_snapshot_hash, retrieval_config, reranker_config, context_config,
+                        ai_provider, ai_model, prompt_version, schema_version
+                    ) VALUES (
+                        '01982ba0-4f20-7000-8000-000000000206',
+                        :space_id,
+                        '01982ba0-4f20-7000-8000-000000000204',
+                        '01982ba0-4f20-7000-8000-000000000205',
+                        'migration-comparison-run',
+                        :request_hash,
+                        :scope_node_id,
+                        true,
+                        '{}'::jsonb,
+                        :request_hash,
+                        '{}'::jsonb,
+                        '{}'::jsonb,
+                        '{}'::jsonb,
+                        'fake',
+                        'fake',
+                        'n2.3-test',
+                        'n2.3-test'
+                    )
+                    """
+                ),
+                {
+                    "space_id": space_id,
+                    "scope_node_id": scope_node_id,
+                    "request_hash": "a" * 64,
+                },
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _clear_comparison_downgrade_guard() -> None:
+    engine = create_engine(get_settings())
+    try:
+        async with engine.begin() as connection:
+            table = await connection.scalar(
+                text("SELECT to_regclass('public.proposal_comparison_runs')")
+            )
+            if table is not None:
+                await connection.execute(
+                    text(
+                        """
+                        DELETE FROM proposal_comparison_candidates
+                        WHERE comparison_run_id = '01982ba0-4f20-7000-8000-000000000206'
+                        """
+                    )
+                )
+                await connection.execute(
+                    text(
+                        """
+                        DELETE FROM proposal_comparison_runs
+                        WHERE id = '01982ba0-4f20-7000-8000-000000000206'
+                        """
+                    )
+                )
+            await connection.execute(
+                text(
+                    """
+                    DELETE FROM research_source_selection_batches
+                    WHERE id = '01982ba0-4f20-7000-8000-000000000205'
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    DELETE FROM research_runs
+                    WHERE id = '01982ba0-4f20-7000-8000-000000000204'
+                    """
+                )
+            )
+    finally:
+        await engine.dispose()
+
+
 async def _seed_legacy_uuid_references() -> None:
     engine = create_engine(get_settings())
     try:
@@ -549,5 +683,23 @@ def test_n22_downgrade_rejects_external_search_audit_records() -> None:
         asyncio.run(_clear_research_run_downgrade_guard())
         command.upgrade(config, "head")
 
-    command.downgrade(config, "0012_n21_proposal")
+
+
+def test_n23_downgrade_rejects_comparison_audit_records() -> None:
+    api_root = Path(__file__).resolve().parents[2]
+    config = Config(str(api_root / "alembic.ini"))
+    command.upgrade(config, "head")
+    asyncio.run(_seed_comparison_downgrade_guard())
+
+    try:
+        with pytest.raises(
+            DBAPIError,
+            match="cannot downgrade N2.3 comparison schema while comparison audit records exist",
+        ):
+            command.downgrade(config, "0013_n22_search")
+    finally:
+        asyncio.run(_clear_comparison_downgrade_guard())
+        command.upgrade(config, "head")
+
+    command.downgrade(config, "0013_n22_search")
     command.upgrade(config, "head")

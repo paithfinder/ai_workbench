@@ -234,6 +234,76 @@ class KnowledgeUpdateProposalService:
             reason=None,
         )
 
+    async def create_comparison_draft(
+        self,
+        session: AsyncSession,
+        *,
+        space_id: UUID,
+        comparison_run_id: UUID,
+        request: ProposalCreate,
+    ) -> ProposalOutcome:
+        """Create a draft from candidates already validated by the comparison service."""
+        key = f"proposal-comparison:{comparison_run_id}"
+        operation = KnowledgeUpdateProposalOperation.CREATE
+        request_hash = hashlib.sha256(
+            f"proposal-comparison:{comparison_run_id}".encode()
+        ).hexdigest()
+        await self._lock_idempotency_key(session, space_id=space_id, key=key)
+        replay = await self._replay(
+            session,
+            space_id=space_id,
+            key=key,
+            request_hash=request_hash,
+        )
+        if replay is not None:
+            return replay
+        target = await self._target(
+            session,
+            space_id=space_id,
+            action=request.action.value,
+            node_id=request.target_node_id,
+            revision_id=request.target_revision_id,
+            for_update=True,
+        )
+        await self._research_run(
+            session, space_id=space_id, research_run_id=request.research_run_id
+        )
+        proposal = KnowledgeUpdateProposal(
+            id=uuid4(),
+            space_id=space_id,
+            research_run_id=request.research_run_id,
+            target_node_id=request.target_node_id,
+            target_revision_id=request.target_revision_id,
+            target_node_version=target[0].version if target else None,
+            action=request.action.value,
+            status=KnowledgeUpdateProposalStatus.DRAFT.value,
+            version=1,
+            suggested_title=_optional_text(request.suggested_title),
+            suggested_body=_optional_text(request.suggested_body),
+            suggested_tags=_clean_list(request.suggested_tags),
+            conditions=_clean_list(request.conditions),
+            exceptions=_clean_list(request.exceptions),
+            comparison_summary=_optional_text(request.comparison_summary),
+            confidence=request.confidence,
+            uncertainty_reason=_optional_text(request.uncertainty_reason),
+        )
+        evidence = await self._freeze_evidence(
+            session, space_id=space_id, proposal=proposal, inputs=request.evidence
+        )
+        session.add_all([proposal, *evidence])
+        return await self._record(
+            session,
+            proposal=proposal,
+            operation=operation,
+            key=key,
+            request_hash=request_hash,
+            expected_version=None,
+            before_snapshot={},
+            from_status="draft",
+            from_version=0,
+            reason=None,
+        )
+
     async def edit(
         self,
         session: AsyncSession,
@@ -775,9 +845,7 @@ class KnowledgeUpdateProposalService:
         )
 
     @staticmethod
-    async def _lock_idempotency_key(
-        session: AsyncSession, *, space_id: UUID, key: str
-    ) -> None:
+    async def _lock_idempotency_key(session: AsyncSession, *, space_id: UUID, key: str) -> None:
         await session.execute(
             select(func.pg_advisory_xact_lock(func.hashtext(f"proposal:{space_id}:{key}")))
         )

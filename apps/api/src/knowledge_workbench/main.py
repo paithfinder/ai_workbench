@@ -21,6 +21,7 @@ from knowledge_workbench.api import (
     knowledge_tree,
     knowledge_update_proposal,
     non_file_sources,
+    proposal_comparison,
     qa,
     retrieval,
     source_parsing,
@@ -119,9 +120,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         pasted_text_body_limit_middleware(resolved_settings.max_pasted_text_size_bytes)
     )
     app.middleware("http")(
-        knowledge_import_body_limit_middleware(
-            resolved_settings.knowledge_import_max_request_bytes
-        )
+        knowledge_import_body_limit_middleware(resolved_settings.knowledge_import_max_request_bytes)
     )
     app.middleware("http")(request_id_middleware)
     app.add_middleware(
@@ -144,6 +143,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(knowledge_tree.router)
     app.include_router(knowledge_import.router)
     app.include_router(knowledge_update_proposal.router)
+    app.include_router(proposal_comparison.router)
     app.include_router(retrieval.router)
     app.include_router(qa.router)
     app.include_router(jobs.router)
