@@ -3505,6 +3505,16 @@
             ],
             "title": "Confidence"
           },
+          "create_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KnowledgeNodeKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "evidence": {
             "items": {
               "$ref": "#/components/schemas/ProposalEvidenceInput"
@@ -3941,6 +3951,17 @@
             ],
             "title": "Confidence"
           },
+          "create_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Create Kind"
+          },
           "created_at": {
             "title": "Created At"
           },
@@ -4089,6 +4110,7 @@
           "target_revision_id",
           "target_node_version",
           "action",
+          "create_kind",
           "status",
           "version",
           "suggested_title",
@@ -7906,6 +7928,100 @@
           }
         },
         "summary": "Edit Proposal",
+        "tags": [
+          "knowledge-update-proposals"
+        ]
+      }
+    },
+    "/api/v1/knowledge-spaces/{space_id}/proposals/{proposal_id}/apply": {
+      "post": {
+        "operationId": "apply_knowledge_update_proposal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "space_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Space Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Apply Proposal",
         "tags": [
           "knowledge-update-proposals"
         ]

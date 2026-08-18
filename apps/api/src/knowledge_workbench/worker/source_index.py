@@ -200,6 +200,20 @@ class SourceIndexWorker(JobRunner):
             )
             if attempt is None:
                 return
+            if snapshot["target_kind"] == "knowledge_revision":
+                current_node = await session.scalar(
+                    select(KnowledgeNode.id)
+                    .where(
+                        KnowledgeNode.id == snapshot["node_id"],
+                        KnowledgeNode.current_revision_id == snapshot["revision_id"],
+                        KnowledgeNode.deleted_at.is_(None),
+                    )
+                    .with_for_update()
+                )
+                if current_node is None:
+                    raise PermanentJobError(
+                        "index_input_stale", "Knowledge revision is no longer current."
+                    )
             await session.execute(
                 delete(RetrievalChunk).where(RetrievalChunk.index_run_id == run.id)
             )

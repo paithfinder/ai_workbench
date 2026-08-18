@@ -18,6 +18,7 @@ from knowledge_workbench.db.models import (
     ActorType,
     KnowledgeEvidence,
     KnowledgeNode,
+    KnowledgeNodeKind,
     KnowledgeRevision,
     KnowledgeUpdateAction,
     KnowledgeUpdateProposal,
@@ -77,6 +78,7 @@ class ProposalCreate(BaseModel):
     research_run_id: UUID | None = None
     target_node_id: UUID | None = None
     target_revision_id: UUID | None = None
+    create_kind: KnowledgeNodeKind | None = None
     suggested_title: str | None = Field(default=None, min_length=1, max_length=500)
     suggested_body: str | None = Field(default=None, min_length=1, max_length=20_000)
     suggested_tags: list[str] = Field(default_factory=list, max_length=20)
@@ -92,6 +94,13 @@ class ProposalCreate(BaseModel):
         if self.action is KnowledgeUpdateAction.CREATE:
             if self.target_revision_id is not None:
                 raise ValueError("create proposals cannot target an existing revision")
+            if self.create_kind not in {
+                KnowledgeNodeKind.FOLDER,
+                KnowledgeNodeKind.DOCUMENT,
+            }:
+                raise ValueError("create proposals require create_kind folder or document")
+        elif self.create_kind is not None:
+            raise ValueError("create_kind is only valid for create proposals")
         elif self.target_node_id is None or self.target_revision_id is None:
             raise ValueError("this proposal action requires target_node_id and target_revision_id")
         return self
@@ -195,6 +204,15 @@ class KnowledgeUpdateProposalService:
             revision_id=request.target_revision_id,
             for_update=True,
         )
+        if request.action is KnowledgeUpdateAction.CREATE:
+            target = (
+                await self._create_parent(
+                    session,
+                    space_id=space_id,
+                    parent_id=request.target_node_id,
+                ),
+                None,
+            )
         await self._research_run(
             session, space_id=space_id, research_run_id=request.research_run_id
         )
@@ -202,10 +220,11 @@ class KnowledgeUpdateProposalService:
             id=uuid4(),
             space_id=space_id,
             research_run_id=request.research_run_id,
-            target_node_id=request.target_node_id,
+            target_node_id=target[0].id if target else None,
             target_revision_id=request.target_revision_id,
             target_node_version=target[0].version if target else None,
             action=request.action.value,
+            create_kind=request.create_kind.value if request.create_kind else None,
             status=KnowledgeUpdateProposalStatus.DRAFT.value,
             version=1,
             suggested_title=_optional_text(request.suggested_title),
@@ -265,6 +284,15 @@ class KnowledgeUpdateProposalService:
             revision_id=request.target_revision_id,
             for_update=True,
         )
+        if request.action is KnowledgeUpdateAction.CREATE:
+            target = (
+                await self._create_parent(
+                    session,
+                    space_id=space_id,
+                    parent_id=request.target_node_id,
+                ),
+                None,
+            )
         await self._research_run(
             session, space_id=space_id, research_run_id=request.research_run_id
         )
@@ -272,10 +300,11 @@ class KnowledgeUpdateProposalService:
             id=uuid4(),
             space_id=space_id,
             research_run_id=request.research_run_id,
-            target_node_id=request.target_node_id,
+            target_node_id=target[0].id if target else None,
             target_revision_id=request.target_revision_id,
             target_node_version=target[0].version if target else None,
             action=request.action.value,
+            create_kind=request.create_kind.value if request.create_kind else None,
             status=KnowledgeUpdateProposalStatus.DRAFT.value,
             version=1,
             suggested_title=_optional_text(request.suggested_title),
@@ -724,6 +753,7 @@ class KnowledgeUpdateProposalService:
         from_version: int,
         reason: str | None,
         to_status: str | None = None,
+        result_snapshot: dict[str, Any] | None = None,
     ) -> ProposalOutcome:
         final_status = to_status or proposal.status
         proposal.status = final_status
@@ -760,7 +790,7 @@ class KnowledgeUpdateProposalService:
             space_id=proposal.space_id,
             proposal_version=proposal.version,
             proposal_status=final_status,
-            snapshot=_proposal_snapshot(proposal),
+            snapshot={**_proposal_snapshot(proposal), **(result_snapshot or {})},
         )
         payload = {
             "proposal_id": str(proposal.id),
@@ -906,6 +936,27 @@ class KnowledgeUpdateProposalService:
                 "Proposal status does not allow this operation.",
                 status_code=409,
             )
+
+    @staticmethod
+    async def _create_parent(
+        session: AsyncSession, *, space_id: UUID, parent_id: UUID | None
+    ) -> KnowledgeNode:
+        statement = select(KnowledgeNode).where(
+            KnowledgeNode.space_id == space_id,
+            KnowledgeNode.deleted_at.is_(None),
+        )
+        if parent_id is None:
+            statement = statement.where(KnowledgeNode.kind == KnowledgeNodeKind.ROOT.value)
+        else:
+            statement = statement.where(KnowledgeNode.id == parent_id)
+        parent = await session.scalar(statement.with_for_update())
+        if parent is None:
+            raise AppError(
+                "proposal_create_parent_invalid",
+                "Create proposal parent was not found in this space.",
+                status_code=409,
+            )
+        return parent
 
     @staticmethod
     async def _target(
@@ -1148,6 +1199,7 @@ def _proposal_snapshot(proposal: KnowledgeUpdateProposal) -> dict[str, Any]:
     return {
         "id": str(proposal.id),
         "action": proposal.action,
+        "create_kind": getattr(proposal, "create_kind", None),
         "status": proposal.status,
         "version": proposal.version,
         "target_node_id": str(proposal.target_node_id) if proposal.target_node_id else None,

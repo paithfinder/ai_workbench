@@ -1968,6 +1968,132 @@ progress::-moz-progress-bar {
   }
 }
 
+.proposal-review-dialog-open {
+  overflow: hidden;
+}
+
+.proposal-review-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(21, 32, 29, 0.48);
+}
+
+.proposal-review-dialog {
+  width: min(100%, 560px);
+  max-height: min(680px, calc(100vh - 48px));
+  overflow-y: auto;
+  padding: 26px;
+  border: 1px solid var(--line-strong);
+  border-top: 4px solid var(--blue-dark);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.proposal-review-dialog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.proposal-review-dialog h2 {
+  margin: 0 0 8px;
+  font: 24px var(--serif);
+}
+
+.proposal-review-dialog-heading p:last-child {
+  max-width: 470px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.proposal-review-dialog-close {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.proposal-review-dialog-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.proposal-review-dialog-field {
+  display: block;
+  margin-top: 24px;
+}
+
+.proposal-review-dialog-field > span {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.proposal-review-dialog-field textarea {
+  width: 100%;
+  min-height: 132px;
+  display: block;
+  padding: 11px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  color: var(--ink);
+  background: var(--surface);
+  font: 13px/1.6 var(--sans);
+  resize: vertical;
+}
+
+.proposal-review-dialog-field textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.proposal-review-dialog-confirmation {
+  display: grid;
+  gap: 5px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--red);
+  color: #6f302a;
+  background: var(--red-soft);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.proposal-review-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+@media (max-width: 560px) {
+  .proposal-review-dialog-backdrop {
+    padding: 12px;
+  }
+
+  .proposal-review-dialog {
+    max-height: calc(100vh - 24px);
+    padding: 20px;
+  }
+
+  .proposal-review-dialog-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+}
+
 /* D7 retrieval debug workspace */
 .retrieval-boundary { display: flex; align-items: center; gap: 14px; margin: 0 0 16px; padding: 12px 15px; border: 1px solid #d4c79e; border-left: 4px solid #bd8d24; color: #624e1b; background: #fff5d5; font-size: 11px; line-height: 1.6; }
 .retrieval-boundary strong { flex: 0 0 auto; font: 10px var(--mono); letter-spacing: .08em; }
@@ -2082,3 +2208,72 @@ progress::-moz-progress-bar {
 .qa-citations blockquote { margin: 0 0 12px; padding: 10px 12px; border-left: 2px solid var(--line-strong); color: var(--muted); background: var(--surface-2); font-size: 11px; line-height: 1.7; }
 @media (max-width: 760px) { .qa-grid { grid-template-columns: 1fr; } .qa-boundary a { margin-left: 0; } }
 @media (max-width: 480px) { .qa-composer .button { width: 100%; } .qa-citations li header { align-items: flex-start; flex-direction: column; } }
+
+/* D8 proposal review workspace */
+.proposal-review-workspace {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(230px, 0.32fr) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.proposal-review-workspace > aside,
+.proposal-review-workspace > article { min-width: 0; }
+.proposal-review-workspace > aside { background: #edf0eb; }
+.proposal-review-workspace > article { display: grid; gap: 18px; padding: clamp(22px, 3vw, 38px); background: var(--surface); }
+.proposal-review-workspace > article > header { padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.proposal-review-workspace > article > header h2 { margin: 0 0 8px; overflow-wrap: anywhere; font: 27px/1.35 var(--serif); }
+.proposal-review-workspace > article > header p:last-child { margin: 0; overflow-wrap: anywhere; color: var(--faint); font: 9px/1.6 var(--mono); }
+.proposal-review-workspace > aside > h2,
+.proposal-review-workspace > article h2 { margin: 0 0 12px; font: 22px var(--serif); }
+.proposal-review-workspace > aside > .state-kicker,
+.proposal-review-workspace > aside > h2,
+.proposal-review-workspace > aside > label,
+.proposal-review-workspace > aside > p:not(.state-kicker) { margin-right: 18px; margin-left: 18px; }
+.proposal-review-workspace > aside > .state-kicker { padding-top: 18px; }
+.proposal-review-workspace > aside > label,
+.proposal-review-workspace > article label { display: grid; gap: 6px; color: var(--muted); font-size: 10px; font-weight: 700; }
+.proposal-review-workspace select,
+.proposal-review-workspace textarea { min-width: 0; border: 1px solid var(--line-strong); border-radius: 2px; color: var(--ink); background: var(--surface); font: 12px/1.6 var(--sans); }
+.proposal-review-workspace select { height: 38px; padding: 0 9px; }
+.proposal-review-workspace textarea { width: 100%; padding: 10px 11px; resize: vertical; }
+.proposal-review-workspace > aside > label + label { margin-top: 10px; }
+.proposal-review-workspace > aside > div[aria-label="提案列表"] { display: grid; gap: 5px; max-height: 570px; margin-top: 16px; padding: 8px; overflow-y: auto; border-top: 1px solid var(--line); }
+.proposal-review-workspace > aside > div[aria-label="提案列表"] button { width: 100%; display: block; padding: 13px; border: 1px solid transparent; background: transparent; text-align: left; }
+.proposal-review-workspace > aside > div[aria-label="提案列表"] button:hover,
+.proposal-review-workspace > aside > div[aria-label="提案列表"] button.is-selected { border-color: #bfd1d7; background: var(--blue-soft); box-shadow: inset 3px 0 0 var(--blue); }
+.proposal-review-workspace > aside > div[aria-label="提案列表"] strong,
+.proposal-review-workspace > aside > div[aria-label="提案列表"] span,
+.proposal-review-workspace > aside > div[aria-label="提案列表"] small { display: block; }
+.proposal-review-workspace > aside > div[aria-label="提案列表"] strong { margin-bottom: 6px; font-size: 12px; line-height: 1.5; }
+.proposal-review-workspace > aside > div[aria-label="提案列表"] span { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.proposal-review-workspace > aside > div[aria-label="提案列表"] small { margin-top: 5px; color: var(--faint); font: 9px var(--mono); }
+.proposal-review-workspace > article > section { min-width: 0; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+.proposal-review-workspace > article > section dl { display: grid; gap: 7px; margin: 0; }
+.proposal-review-workspace > article > section dl div { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 12px; }
+.proposal-review-workspace > article > section dt { color: var(--faint); font: 9px var(--mono); }
+.proposal-review-workspace > article > section dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 11px; }
+.proposal-review-workspace > article > section h3 { margin: 16px 0 7px; font: 18px var(--serif); }
+.proposal-review-workspace > article > section p:not(.state-kicker):not(.panel-caption) { color: var(--muted); font-size: 11px; line-height: 1.7; white-space: pre-wrap; }
+.proposal-review-workspace > article > section ul,
+.proposal-review-workspace > article > section ol { display: grid; gap: 9px; margin: 10px 0 0; padding-left: 20px; color: var(--muted); font-size: 11px; line-height: 1.65; }
+.proposal-review-workspace > article > section blockquote { margin: 9px 0; padding: 12px 14px; border-left: 3px solid #bd8d24; color: #51462f; background: #fff6d9; font: 12px/1.75 var(--serif); white-space: pre-wrap; }
+.proposal-review-workspace > article > section[aria-labelledby="proposal-evidence-title"] > ol,
+.proposal-review-workspace > article > section[aria-labelledby="proposal-audit-title"] > ol { padding-left: 0; list-style: none; }
+.proposal-review-workspace > article > section[aria-labelledby="proposal-evidence-title"] > ol > li,
+.proposal-review-workspace > article > section[aria-labelledby="proposal-audit-title"] > ol > li { padding: 13px; border: 1px solid var(--line); background: var(--surface-2); }
+.proposal-review-workspace > article > section[aria-labelledby="proposal-audit-title"] > ol > li { display: grid; gap: 5px; }
+.proposal-review-workspace > article > section[aria-labelledby="proposal-audit-title"] > ol > li span,
+.proposal-review-workspace > article > section[aria-labelledby="proposal-audit-title"] > ol > li small { color: var(--muted); font-size: 10px; }
+.proposal-review-workspace > article > section[aria-labelledby="proposal-actions-title"] { padding-bottom: 0; border-bottom: 0; }
+
+@media (max-width: 760px) {
+  .proposal-review-workspace { grid-template-columns: 1fr; }
+  .proposal-review-workspace > aside { border-bottom: 1px solid var(--line); }
+  .proposal-review-workspace > aside > div[aria-label="提案列表"] { max-height: 290px; }
+}
+
+@media (max-width: 480px) {
+  .proposal-review-workspace > article { padding: 20px 16px; }
+  .proposal-review-workspace > article > section dl div { grid-template-columns: 1fr; gap: 3px; }
+}

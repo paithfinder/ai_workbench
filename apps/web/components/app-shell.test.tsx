@@ -21,8 +21,22 @@ describe("AppShell", () => {
       "href",
       "#main-content",
     );
-    expect(screen.getAllByRole("link")).toHaveLength(9);
+    expect(screen.getAllByRole("link")).toHaveLength(10);
     expect(screen.getByRole("link", { name: "我的知识树" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Proposal 审核" })).toHaveAttribute(
+      "href",
+      "/proposals",
+    );
+  });
+
+  it("marks proposal review navigation active", () => {
+    usePathname.mockReturnValue("/proposals");
+    render(<AppShell><h1>Proposal 审核页</h1></AppShell>);
+
+    expect(screen.getByRole("link", { name: "Proposal 审核" })).toHaveAttribute(
       "aria-current",
       "page",
     );

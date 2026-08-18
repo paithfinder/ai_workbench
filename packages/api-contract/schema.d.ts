@@ -433,6 +433,23 @@ export interface paths {
         patch: operations["edit_knowledge_update_proposal"];
         trace?: never;
     };
+    "/api/v1/knowledge-spaces/{space_id}/proposals/{proposal_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Proposal */
+        post: operations["apply_knowledge_update_proposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/knowledge-spaces/{space_id}/proposals/{proposal_id}/approve": {
         parameters: {
             query?: never;
@@ -2186,6 +2203,7 @@ export interface components {
             conditions?: string[];
             /** Confidence */
             confidence?: number | null;
+            create_kind?: components["schemas"]["KnowledgeNodeKind"] | null;
             /** Evidence */
             evidence: components["schemas"]["ProposalEvidenceInput"][];
             /** Exceptions */
@@ -2308,6 +2326,8 @@ export interface components {
             conditions: string[];
             /** Confidence */
             confidence: number | null;
+            /** Create Kind */
+            create_kind: string | null;
             /** Created At */
             created_at: unknown;
             /** Exceptions */
@@ -4212,6 +4232,62 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ProposalEdit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProposalResultResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    apply_knowledge_update_proposal: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                space_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposalDecision"];
             };
         };
         responses: {

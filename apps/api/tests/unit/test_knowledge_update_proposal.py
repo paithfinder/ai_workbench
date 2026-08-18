@@ -35,6 +35,7 @@ def _evidence(role: str = "new_support") -> dict[str, object]:
 def _create_payload(**overrides: object) -> dict[str, object]:
     payload: dict[str, object] = {
         "action": "create",
+        "create_kind": "document",
         "suggested_title": "Title",
         "suggested_body": "Body",
         "evidence": [_evidence()],
@@ -83,15 +84,21 @@ def test_create_action_allows_no_target_or_parent_target_but_never_revision() ->
             _create_payload(target_node_id=str(uuid4()), target_revision_id=str(uuid4()))
         )
 
+    with pytest.raises(ValidationError, match="require create_kind"):
+        ProposalCreate.model_validate(_create_payload(create_kind=None))
+
 
 def test_existing_knowledge_actions_require_node_and_revision() -> None:
     for action in ("revise", "supersede", "merge_suggestion", "mark_review_recommended"):
         with pytest.raises(ValidationError, match="requires target_node_id"):
-            ProposalCreate.model_validate(_create_payload(action=action))
+            ProposalCreate.model_validate(_create_payload(action=action, create_kind=None))
 
     request = ProposalCreate.model_validate(
         _create_payload(
-            action="revise", target_node_id=str(uuid4()), target_revision_id=str(uuid4())
+            action="revise",
+            create_kind=None,
+            target_node_id=str(uuid4()),
+            target_revision_id=str(uuid4()),
         )
     )
     assert request.action is KnowledgeUpdateAction.REVISE
@@ -170,6 +177,7 @@ def test_snapshot_is_detached_from_mutable_model_values() -> None:
         target_node_id=None,
         target_revision_id=None,
         target_node_version=None,
+        create_kind="document",
         suggested_title="Title",
         suggested_body="Body",
         suggested_tags=["one"],

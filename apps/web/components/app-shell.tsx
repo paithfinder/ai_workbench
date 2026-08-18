@@ -11,6 +11,7 @@ const navigation = [
       { href: "/", label: "今日学习", icon: "⌂" },
       { href: "/import", label: "导入知识", icon: "⇧" },
       { href: "/extraction", label: "提炼审查", icon: "✓" },
+      { href: "/proposals", label: "Proposal 审核", icon: "◇" },
       { href: "/knowledge", label: "我的知识树", icon: "⌘" },
     ],
   },

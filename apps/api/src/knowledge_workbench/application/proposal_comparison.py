@@ -35,6 +35,7 @@ from knowledge_workbench.db.models import (
     ActorType,
     KnowledgeEvidence,
     KnowledgeNode,
+    KnowledgeNodeKind,
     KnowledgeUpdateAction,
     KnowledgeUpdateProposalEvidenceRole,
     ParseArtifactStatus,
@@ -676,6 +677,11 @@ class ProposalComparisonService:
         )
         return ProposalCreate(
             action=action,
+            create_kind=(
+                KnowledgeNodeKind.DOCUMENT
+                if action is KnowledgeUpdateAction.CREATE
+                else None
+            ),
             research_run_id=run.research_run_id,
             target_node_id=target_node_id,
             target_revision_id=target_revision_id,

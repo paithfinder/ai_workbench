@@ -176,6 +176,7 @@ class KnowledgeUpdateProposalOperation(StrEnum):
     EDIT = "edit"
     SUBMIT = "submit"
     APPROVE = "approve"
+    APPLY = "apply"
     REJECT = "reject"
     SUPERSEDE = "supersede"
 
@@ -1266,7 +1267,10 @@ class ProposalComparisonCandidate(Base):
             "content_hash ~ '^[0-9a-f]{64}$' AND quote_hash ~ '^[0-9a-f]{64}$'",
             name="ck_proposal_comparison_candidates_hashes",
         ),
-        CheckConstraint("length(btrim(frozen_quote)) > 0", name="ck_proposal_comparison_candidates_quote"),
+        CheckConstraint(
+            "length(btrim(frozen_quote)) > 0",
+            name="ck_proposal_comparison_candidates_quote",
+        ),
         CheckConstraint(
             "(keyword_rank IS NULL OR keyword_rank > 0) "
             "AND (vector_rank IS NULL OR vector_rank > 0) "
@@ -1392,6 +1396,10 @@ class KnowledgeUpdateProposal(Base):
             "suggested_title IS NULL OR length(btrim(suggested_title)) > 0",
             name="ck_knowledge_update_proposals_title",
         ),
+        CheckConstraint(
+            "create_kind IS NULL OR (action = 'create' AND create_kind IN ('folder','document'))",
+            name="ck_knowledge_update_proposals_create_kind",
+        ),
         Index(
             "ix_knowledge_update_proposals_space_status_created",
             "space_id",
@@ -1415,6 +1423,7 @@ class KnowledgeUpdateProposal(Base):
     target_revision_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     target_node_version: Mapped[int | None] = mapped_column(Integer)
     action: Mapped[str] = mapped_column(String(32), nullable=False)
+    create_kind: Mapped[str | None] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default=KnowledgeUpdateProposalStatus.DRAFT
     )
@@ -1551,7 +1560,7 @@ class KnowledgeUpdateProposalRequest(Base):
             "space_id", "idempotency_key", name="uq_knowledge_update_proposal_requests_key"
         ),
         CheckConstraint(
-            "operation IN ('create','edit','submit','approve','reject','supersede')",
+            "operation IN ('create','edit','submit','approve','apply','reject','supersede')",
             name="ck_knowledge_update_proposal_requests_operation",
         ),
         CheckConstraint(

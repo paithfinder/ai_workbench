@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Header, Query, status
 from pydantic import BaseModel
 
-from knowledge_workbench.api.dependencies import SessionDependency
+from knowledge_workbench.api.dependencies import SessionDependency, SettingsDependency
 from knowledge_workbench.application.knowledge_update_proposal import (
     KnowledgeUpdateProposalService,
     ProposalCreate,
@@ -16,6 +16,7 @@ from knowledge_workbench.application.knowledge_update_proposal import (
     ProposalSubmit,
     ProposalSupersede,
 )
+from knowledge_workbench.application.proposal_apply import ProposalApplyService
 from knowledge_workbench.core.errors import ErrorEnvelope
 from knowledge_workbench.db.models import (
     KnowledgeUpdateProposal,
@@ -48,6 +49,7 @@ class ProposalItemResponse(BaseModel):
     target_revision_id: UUID | None
     target_node_version: int | None
     action: str
+    create_kind: str | None
     status: str
     version: int
     suggested_title: str | None
@@ -284,6 +286,32 @@ async def approve_proposal(
     async with session.begin():
         outcome = await KnowledgeUpdateProposalService().approve(
             session,
+            space_id=space_id,
+            proposal_id=proposal_id,
+            idempotency_key=idempotency_key,
+            request=request,
+        )
+    return _result(outcome)
+
+
+@router.post(
+    "/proposals/{proposal_id}/apply",
+    response_model=ProposalResultResponse,
+    responses=ERROR_RESPONSES,
+    operation_id="apply_knowledge_update_proposal",
+)
+async def apply_proposal(
+    space_id: UUID,
+    proposal_id: UUID,
+    request: ProposalDecision,
+    idempotency_key: IdempotencyKey,
+    session: SessionDependency,
+    settings: SettingsDependency,
+) -> ProposalResultResponse:
+    async with session.begin():
+        outcome = await ProposalApplyService().apply(
+            session,
+            settings=settings,
             space_id=space_id,
             proposal_id=proposal_id,
             idempotency_key=idempotency_key,

@@ -23,6 +23,7 @@ from knowledge_workbench.db.models import (
     KnowledgeNodeKind,
     KnowledgeRevision,
     KnowledgeSpace,
+    KnowledgeUpdateProposalEvidence,
     KnowledgeWriteRequest,
     KnowledgeWriteResult,
     OutboxEvent,
@@ -1041,6 +1042,137 @@ class KnowledgeTreeService:
             node_version=result.node_version,
             snapshot=dict(result.snapshot),
         )
+
+    async def create_proposal_node(
+        self,
+        session: AsyncSession,
+        *,
+        space_id: UUID,
+        parent: KnowledgeNode,
+        kind: KnowledgeNodeKind,
+        title: str,
+        body: str,
+        tags: list[str],
+        conditions: list[str],
+        exceptions: list[str],
+        evidence: list[KnowledgeUpdateProposalEvidence],
+        reason: str | None,
+    ) -> tuple[KnowledgeNode, KnowledgeRevision, list[KnowledgeEvidence], ReviewCard]:
+        if kind.value not in CREATABLE_KINDS:
+            raise AppError(
+                "proposal_create_kind_invalid",
+                "Proposal create_kind must be folder or document.",
+                status_code=409,
+            )
+        self._validate_parent(kind.value, parent)
+        node = KnowledgeNode(
+            id=uuid4(),
+            space_id=space_id,
+            parent_id=parent.id,
+            kind=kind.value,
+            path="pending",
+            version=1,
+            sort_order=await self._next_sort_order(session, space_id, parent.id),
+        )
+        node.path = f"{parent.path}.{_path_label(node.id)}"
+        session.add(node)
+        await session.flush()
+        revision = self._new_revision(
+            node=node,
+            revision_number=1,
+            title=title,
+            body=body,
+            tags=tags,
+            conditions=conditions,
+            exceptions=exceptions,
+            edit_reason=reason,
+        )
+        session.add(revision)
+        await session.flush()
+        copied_evidence = self._proposal_evidence_rows(revision, evidence)
+        card = ReviewCard(
+            id=uuid4(),
+            space_id=space_id,
+            knowledge_node_id=node.id,
+            knowledge_revision_id=revision.id,
+            status="active",
+        )
+        session.add_all([card, *copied_evidence])
+        node.current_revision_id = revision.id
+        await session.flush()
+        return node, revision, copied_evidence, card
+
+    async def append_proposal_revision(
+        self,
+        session: AsyncSession,
+        *,
+        node: KnowledgeNode,
+        current: KnowledgeRevision,
+        title: str,
+        body: str,
+        tags: list[str],
+        conditions: list[str],
+        exceptions: list[str],
+        evidence: list[KnowledgeUpdateProposalEvidence],
+        reason: str | None,
+    ) -> tuple[KnowledgeRevision, list[KnowledgeEvidence], ReviewCard | None]:
+        self._validate_mutable(node)
+        if node.kind not in EDITABLE_KINDS:
+            raise AppError(
+                "knowledge_node_has_no_body",
+                "Only document and point nodes can append revisions.",
+                status_code=409,
+            )
+        revision = self._new_revision(
+            node=node,
+            revision_number=current.revision_number + 1,
+            title=title,
+            body=body,
+            tags=tags,
+            conditions=conditions,
+            exceptions=exceptions,
+            edit_reason=reason,
+        )
+        session.add(revision)
+        await session.flush()
+        copied_evidence = self._proposal_evidence_rows(revision, evidence)
+        session.add_all(copied_evidence)
+        node.current_revision_id = revision.id
+        node.version += 1
+        card = await session.scalar(
+            select(ReviewCard).where(
+                ReviewCard.knowledge_node_id == node.id,
+                ReviewCard.space_id == node.space_id,
+            )
+        )
+        if card is not None:
+            card.knowledge_revision_id = revision.id
+        await session.flush()
+        return revision, copied_evidence, card
+
+    @staticmethod
+    def _proposal_evidence_rows(
+        revision: KnowledgeRevision,
+        evidence: list[KnowledgeUpdateProposalEvidence],
+    ) -> list[KnowledgeEvidence]:
+        by_section: dict[UUID, KnowledgeUpdateProposalEvidence] = {}
+        for item in evidence:
+            by_section.setdefault(item.section_id, item)
+        return [
+            KnowledgeEvidence(
+                id=uuid4(),
+                revision_id=revision.id,
+                space_id=revision.space_id,
+                source_version_id=item.source_version_id,
+                parse_artifact_id=item.parse_artifact_id,
+                section_id=item.section_id,
+                quote_hash=item.quote_hash,
+                content_hash=item.content_hash,
+                locator=dict(item.locator),
+                frozen_quote=item.frozen_quote,
+            )
+            for item in by_section.values()
+        ]
 
     @staticmethod
     async def _lock_space(session: AsyncSession, space_id: UUID) -> KnowledgeSpace:

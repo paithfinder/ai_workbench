@@ -128,6 +128,120 @@ async def _clear_proposal_downgrade_guard() -> None:
         await engine.dispose()
 
 
+async def _seed_n24_create_kind_downgrade_guard() -> None:
+    engine = create_engine(get_settings())
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO knowledge_update_proposals (
+                        id, space_id, action, create_kind, suggested_title
+                    )
+                    SELECT
+                        '01982ba0-4f20-7000-8000-000000000207',
+                        id,
+                        'create',
+                        'document',
+                        'N2.4 create kind downgrade guard'
+                    FROM knowledge_spaces
+                    ORDER BY created_at
+                    LIMIT 1
+                    """
+                )
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _clear_n24_create_kind_downgrade_guard() -> None:
+    engine = create_engine(get_settings())
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    """
+                    DELETE FROM knowledge_update_proposals
+                    WHERE id = '01982ba0-4f20-7000-8000-000000000207'
+                    """
+                )
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _seed_n24_apply_downgrade_guard() -> None:
+    engine = create_engine(get_settings())
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    """
+                    WITH selected_space AS (
+                        SELECT id
+                        FROM knowledge_spaces
+                        ORDER BY created_at
+                        LIMIT 1
+                    )
+                    INSERT INTO knowledge_update_proposals (
+                        id, space_id, action, suggested_title
+                    )
+                    SELECT
+                        '01982ba0-4f20-7000-8000-000000000208',
+                        id,
+                        'create',
+                        'N2.4 apply downgrade guard'
+                    FROM selected_space
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    INSERT INTO knowledge_update_proposal_requests (
+                        id, space_id, proposal_id, idempotency_key, operation, request_hash
+                    )
+                    SELECT
+                        '01982ba0-4f20-7000-8000-000000000209',
+                        space_id,
+                        id,
+                        'migration-n24-apply-guard',
+                        'apply',
+                        :request_hash
+                    FROM knowledge_update_proposals
+                    WHERE id = '01982ba0-4f20-7000-8000-000000000208'
+                    """
+                ),
+                {"request_hash": "b" * 64},
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _clear_n24_apply_downgrade_guard() -> None:
+    engine = create_engine(get_settings())
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    """
+                    DELETE FROM knowledge_update_proposal_requests
+                    WHERE id = '01982ba0-4f20-7000-8000-000000000209'
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    DELETE FROM knowledge_update_proposals
+                    WHERE id = '01982ba0-4f20-7000-8000-000000000208'
+                    """
+                )
+            )
+    finally:
+        await engine.dispose()
+
+
 async def _seed_research_run_downgrade_guard() -> None:
     engine = create_engine(get_settings())
     try:
@@ -702,4 +816,41 @@ def test_n23_downgrade_rejects_comparison_audit_records() -> None:
         command.upgrade(config, "head")
 
     command.downgrade(config, "0013_n22_search")
+    command.upgrade(config, "head")
+
+
+def test_n24_downgrade_rejects_apply_contract_records() -> None:
+    api_root = Path(__file__).resolve().parents[2]
+    config = Config(str(api_root / "alembic.ini"))
+    command.upgrade(config, "head")
+
+    asyncio.run(_seed_n24_create_kind_downgrade_guard())
+    try:
+        with pytest.raises(
+            DBAPIError,
+            match=(
+                "cannot downgrade N2.4 proposal apply schema while apply records or "
+                "create_kind exist"
+            ),
+        ):
+            command.downgrade(config, "0014_n23_comparison")
+    finally:
+        asyncio.run(_clear_n24_create_kind_downgrade_guard())
+        command.upgrade(config, "head")
+
+    asyncio.run(_seed_n24_apply_downgrade_guard())
+    try:
+        with pytest.raises(
+            DBAPIError,
+            match=(
+                "cannot downgrade N2.4 proposal apply schema while apply records or "
+                "create_kind exist"
+            ),
+        ):
+            command.downgrade(config, "0014_n23_comparison")
+    finally:
+        asyncio.run(_clear_n24_apply_downgrade_guard())
+        command.upgrade(config, "head")
+
+    command.downgrade(config, "0014_n23_comparison")
     command.upgrade(config, "head")

@@ -16,10 +16,12 @@ from knowledge_workbench.application.knowledge_update_proposal import (
     ProposalDecision,
     ProposalSubmit,
 )
+from knowledge_workbench.application.proposal_apply import ProposalApplyService
 from knowledge_workbench.config import Settings
 from knowledge_workbench.core.errors import AppError
 from knowledge_workbench.db.models import (
     ActivityEvent,
+    KnowledgeEvidence,
     KnowledgeNode,
     KnowledgeNodeKind,
     KnowledgeRevision,
@@ -30,6 +32,8 @@ from knowledge_workbench.db.models import (
     KnowledgeUpdateProposalTransition,
     OutboxEvent,
     ParseArtifactStatus,
+    RetrievalIndexRun,
+    ReviewCard,
     Source,
     SourceKind,
     SourceParseArtifact,
@@ -152,6 +156,7 @@ def _create_request(section: SourceSection) -> ProposalCreate:
     return ProposalCreate.model_validate(
         {
             "action": "create",
+            "create_kind": "document",
             "suggested_title": "Proposed title",
             "suggested_body": "Proposed body",
             "evidence": [{"role": "new_support", "section_id": str(section.id)}],
@@ -661,6 +666,176 @@ async def test_database_rejects_cross_space_proposal_references(
         }
     )
 
+
+async def test_apply_create_writes_one_revision_evidence_index_and_audit_chain(
+    postgres_session: AsyncSession,
+) -> None:
+    section = await _seed_ready_section(postgres_session)
+    proposal_service = KnowledgeUpdateProposalService()
+    created = await proposal_service.create(
+        postgres_session,
+        space_id=DEFAULT_SPACE_ID,
+        idempotency_key="proposal-apply-create",
+        request=_create_request(section),
+    )
+    submitted = await proposal_service.submit(
+        postgres_session,
+        space_id=DEFAULT_SPACE_ID,
+        proposal_id=created.proposal_id,
+        idempotency_key="proposal-apply-submit",
+        request=ProposalSubmit(expected_version=created.proposal_version),
+    )
+    approved = await proposal_service.approve(
+        postgres_session,
+        space_id=DEFAULT_SPACE_ID,
+        proposal_id=created.proposal_id,
+        idempotency_key="proposal-apply-approve",
+        request=ProposalDecision(expected_version=submitted.proposal_version),
+    )
+
+    applied = await ProposalApplyService().apply(
+        postgres_session,
+        settings=Settings(app_env="test"),
+        space_id=DEFAULT_SPACE_ID,
+        proposal_id=created.proposal_id,
+        idempotency_key="proposal-apply-once",
+        request=ProposalDecision(expected_version=approved.proposal_version, reason="reviewed"),
+    )
+    replay = await ProposalApplyService().apply(
+        postgres_session,
+        settings=Settings(app_env="test"),
+        space_id=DEFAULT_SPACE_ID,
+        proposal_id=created.proposal_id,
+        idempotency_key="proposal-apply-once",
+        request=ProposalDecision(expected_version=approved.proposal_version, reason="reviewed"),
+    )
+
+    assert replay == applied
+    assert applied.proposal_status == "applied"
+    assert applied.proposal_version == approved.proposal_version + 1
+    snapshot = applied.snapshot["apply"]
+    node_id = UUID(snapshot["target_node_id"])
+    revision_id = UUID(snapshot["new_revision_id"])
+    node = await postgres_session.get(KnowledgeNode, node_id)
+    assert node is not None
+    assert node.current_revision_id == revision_id
+    assert node.version == 1
+    assert snapshot["old_revision_id"] is None
+    assert snapshot["evidence_ids"]
+    assert snapshot["index_job_id"] is not None
+    assert snapshot["index_run_id"] is not None
+    assert await postgres_session.scalar(
+        select(func.count())
+        .select_from(KnowledgeRevision)
+        .where(KnowledgeRevision.id == revision_id)
+    ) == 1
+    assert await postgres_session.scalar(
+        select(func.count()).select_from(KnowledgeEvidence).where(
+            KnowledgeEvidence.revision_id == revision_id
+        )
+    ) == 1
+    card = await postgres_session.scalar(
+        select(ReviewCard).where(ReviewCard.knowledge_node_id == node_id)
+    )
+    assert card is not None
+    assert card.knowledge_revision_id == revision_id
+    run = await postgres_session.get(RetrievalIndexRun, UUID(snapshot["index_run_id"]))
+    assert run is not None
+    assert run.target_kind == "knowledge_revision"
+    assert run.target_id == revision_id
+    assert await postgres_session.scalar(
+        select(func.count()).select_from(KnowledgeUpdateProposalRequest).where(
+            KnowledgeUpdateProposalRequest.proposal_id == created.proposal_id
+        )
+    ) == 4
+    assert await postgres_session.scalar(
+        select(func.count()).select_from(KnowledgeUpdateProposalTransition).where(
+            KnowledgeUpdateProposalTransition.proposal_id == created.proposal_id
+        )
+    ) == 4
+    assert await postgres_session.scalar(
+        select(func.count()).select_from(ActivityEvent).where(
+            ActivityEvent.entity_id == created.proposal_id
+        )
+    ) == 4
+    assert await postgres_session.scalar(
+        select(func.count()).select_from(OutboxEvent).where(
+            OutboxEvent.aggregate_id == created.proposal_id
+        )
+    ) == 4
+
+
+async def test_apply_rejects_target_that_changed_after_approval(
+    postgres_session: AsyncSession,
+) -> None:
+    section = await _seed_ready_section(postgres_session)
+    node, revision = await _seed_target_node(postgres_session)
+    proposal_service = KnowledgeUpdateProposalService()
+    created = await proposal_service.create(
+        postgres_session,
+        space_id=DEFAULT_SPACE_ID,
+        idempotency_key="proposal-apply-stale-create",
+        request=ProposalCreate.model_validate(
+            {
+                "action": "revise",
+                "target_node_id": str(node.id),
+                "target_revision_id": str(revision.id),
+                "suggested_title": "Updated target",
+                "evidence": [{"role": "new_support", "section_id": str(section.id)}],
+            }
+        ),
+    )
+    submitted = await proposal_service.submit(
+        postgres_session,
+        space_id=DEFAULT_SPACE_ID,
+        proposal_id=created.proposal_id,
+        idempotency_key="proposal-apply-stale-submit",
+        request=ProposalSubmit(expected_version=created.proposal_version),
+    )
+    approved = await proposal_service.approve(
+        postgres_session,
+        space_id=DEFAULT_SPACE_ID,
+        proposal_id=created.proposal_id,
+        idempotency_key="proposal-apply-stale-approve",
+        request=ProposalDecision(expected_version=submitted.proposal_version),
+    )
+    replacement = KnowledgeRevision(
+        id=uuid4(),
+        node_id=node.id,
+        space_id=DEFAULT_SPACE_ID,
+        revision_number=2,
+        title="Replacement revision",
+        body="Replacement revision body",
+        tags=[],
+        conditions=[],
+        exceptions=[],
+        actor="integration",
+        content_hash=_sha256("proposal apply replacement revision"),
+    )
+    postgres_session.add(replacement)
+    await postgres_session.flush()
+    node.current_revision_id = replacement.id
+    await postgres_session.flush()
+
+    with pytest.raises(AppError) as caught:
+        await ProposalApplyService().apply(
+            postgres_session,
+            settings=Settings(app_env="test"),
+            space_id=DEFAULT_SPACE_ID,
+            proposal_id=created.proposal_id,
+            idempotency_key="proposal-apply-stale",
+            request=ProposalDecision(expected_version=approved.proposal_version),
+        )
+    assert caught.value.code == "proposal_target_stale"
+    persisted = await postgres_session.get(KnowledgeUpdateProposal, created.proposal_id)
+    assert persisted is not None
+    assert persisted.status == "approved"
+    assert persisted.version == approved.proposal_version
+    assert await postgres_session.scalar(
+        select(func.count()).select_from(KnowledgeUpdateProposalTransition).where(
+            KnowledgeUpdateProposalTransition.proposal_id == created.proposal_id
+        )
+    ) == 3
 
 async def test_nested_rollback_removes_proposal_audit_rows(
     postgres_session: AsyncSession,
